@@ -5,9 +5,10 @@ import {
   Plus, Save, CheckCircle2, Lock, Unlock, ChevronUp, ArrowUpDown, Archive,
   Clock, AlertTriangle, X,
 } from "lucide-react";
-import { useQueries, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueries, useQueryClient } from "@tanstack/react-query";
 import {
   getGetMileageSummaryQueryOptions,
+  getListPeriodAnnotationsQueryOptions,
   useGetGpsDevices,
   useListProjects,
   useListTeamLeaders,
@@ -15,7 +16,6 @@ import {
   useCreateTeamLeader,
   useListPeriods,
   useGetOrCreatePeriod,
-  useListPeriodAnnotations,
   useFinalizePeriod,
   useMarkAnnotationsExported,
   useUpsertAnnotation,
@@ -83,7 +83,7 @@ function applySort<T extends { date: string; deviceName: string; key: string }>(
       case "leader":   va = annA.leader.toLowerCase();     vb = annB.leader.toLowerCase();     break;
       default: return 0;
     }
-    const cmp = typeof va === "number" ? va - vb : va.localeCompare(vb as string);
+    const cmp = typeof va === "number" ? (va as number) - (vb as number) : (va as string).localeCompare(vb as string);
     return dir === "asc" ? cmp : -cmp;
   });
 }
@@ -223,14 +223,14 @@ export default function Home() {
   const updateAnnotationM  = useUpdateAnnotation();
   const verifyPasswordM    = useVerifyManagerPassword();
 
-  const { data: periodAnnotations } = useListPeriodAnnotations(
-    activePeriodId ?? 0,
-    { query: { enabled: activePeriodId !== null } },
-  );
-  const { data: archiveAnnotations, isFetching: archiveFetching } = useListPeriodAnnotations(
-    archivePeriodId ?? 0,
-    { query: { enabled: archivePeriodId !== null } },
-  );
+  const { data: periodAnnotations } = useQuery({
+    ...getListPeriodAnnotationsQueryOptions(activePeriodId ?? 0),
+    enabled: activePeriodId !== null,
+  });
+  const { data: archiveAnnotations, isFetching: archiveFetching } = useQuery({
+    ...getListPeriodAnnotationsQueryOptions(archivePeriodId ?? 0),
+    enabled: archivePeriodId !== null,
+  });
 
   // ── Period info ─────────────────────────────────────────────────────────────
   const currentPeriod = periods.find(p => p.id === activePeriodId)  ?? null;
@@ -664,11 +664,12 @@ export default function Home() {
         {/* Status */}
         <td className="px-2 py-1.5 w-7">
           {savedInfo && (
-            <CheckCircle2
-              className={cn("h-3.5 w-3.5",
-                savedInfo.is_exported ? "text-white/20" : "text-emerald-400/70")}
-              title={savedInfo.is_exported ? "Saved & exported" : "Saved"}
-            />
+            <span aria-label={savedInfo.is_exported ? "Saved & exported" : "Saved"}>
+              <CheckCircle2
+                className={cn("h-3.5 w-3.5",
+                  savedInfo.is_exported ? "text-white/20" : "text-emerald-400/70")}
+              />
+            </span>
           )}
         </td>
         {/* DATE */}
