@@ -1,0 +1,8 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "WEH7RYu_JynL5kiaMU0Bo"
+uri = "file://artifacts/driver-app/assets/images/icon.png"
+type = "image"
+title = "generated_image"
