@@ -19,17 +19,20 @@ import {
   useListTeamLeaders,
   useListDriverSessions,
   useStartDriverSession,
-  useEndDriverSession,
 } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
 
 type Colors = ReturnType<typeof useColors>;
 type Insets = { top: number; bottom: number; left: number; right: number };
 type ModalType = "date" | "driver" | "truck" | "project" | null;
+type DateOption = { value: string; label: string; short: string };
 
-type DateOption = { value: string; label: string };
+function todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
-function recentDates(count = 14): DateOption[] {
+function recentDates(count = 30): DateOption[] {
   const DAYS   = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const result: DateOption[] = [];
@@ -38,93 +41,58 @@ function recentDates(count = 14): DateOption[] {
     const d = new Date(base);
     d.setDate(d.getDate() - i);
     const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const short = `${MONTHS[d.getMonth()]} ${d.getDate()}`;
     let label: string;
-    if (i === 0)      label = `Today — ${MONTHS[d.getMonth()]} ${d.getDate()}`;
-    else if (i === 1) label = `Yesterday — ${MONTHS[d.getMonth()]} ${d.getDate()}`;
-    else              label = `${DAYS[d.getDay()]}, ${MONTHS[d.getMonth()]} ${d.getDate()}`;
-    result.push({ value, label });
+    if (i === 0)      label = `Today — ${short}`;
+    else if (i === 1) label = `Yesterday — ${short}`;
+    else              label = `${DAYS[d.getDay()]}, ${short}`;
+    result.push({ value, label, short });
   }
   return result;
-}
-
-function todayStr() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-function fmtTime(d: Date) {
-  let h = d.getHours();
-  const m = String(d.getMinutes()).padStart(2, "0");
-  const ampm = h >= 12 ? "PM" : "AM";
-  h = h % 12 || 12;
-  return `${h}:${m} ${ampm}`;
-}
-
-function fmtDate(d: Date) {
-  const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-  const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  return `${DAYS[d.getDay()]}, ${MONTHS[d.getMonth()]} ${d.getDate()}`;
-}
-
-function fmtSessionTime(iso: string) {
-  return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
 export default function ShiftScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
 
-  const [selectedDate, setSelectedDate] = useState<string>(todayStr);
-  const [selectedDriver, setSelectedDriver] = useState<string>("");
+  const dateOptions = useMemo(() => recentDates(30), []);
+
+  const [selectedDate, setSelectedDate]       = useState<string>(todayStr);
+  const [selectedDriver, setSelectedDriver]   = useState<string>("");
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
   const [selectedProject, setSelectedProject] = useState<string>("");
-  const [modalType, setModalType] = useState<ModalType>(null);
-  const dateOptions = useMemo(() => recentDates(14), []);
-  const [now, setNow] = useState<Date>(new Date());
-  const [errorMsg, setErrorMsg] = useState<string>("");
-  const [successMsg, setSuccessMsg] = useState<string>("");
+  const [modalType, setModalType]             = useState<ModalType>(null);
+  const [errorMsg, setErrorMsg]               = useState<string>("");
+  const [successMsg, setSuccessMsg]           = useState<string>("");
+
+  const { data: devices = [],     isLoading: devicesLoading  } = useGetGpsDevices();
+  const { data: projects = [],    isLoading: projectsLoading } = useListProjects();
+  const { data: teamLeaders = [], isLoading: leadersLoading  } = useListTeamLeaders();
+
+  const { data: dateSessions = [], refetch: refetchSessions } = useListDriverSessions({
+    from: selectedDate,
+    to:   selectedDate,
+  });
 
   useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 15000);
-    return () => clearInterval(t);
-  }, []);
-
-  const { data: devices = [], isLoading: devicesLoading } = useGetGpsDevices();
-  const { data: projects = [], isLoading: projectsLoading } = useListProjects();
-  const { data: teamLeaders = [], isLoading: leadersLoading } = useListTeamLeaders();
-
-  const {
-    data: dateSessions = [],
-    refetch: refetchSessions,
-  } = useListDriverSessions({ from: selectedDate, to: selectedDate });
-
-  useEffect(() => {
-    const t = setInterval(() => { refetchSessions(); }, 30000);
+    const t = setInterval(() => refetchSessions(), 30000);
     return () => clearInterval(t);
   }, [refetchSessions]);
 
-  const startMut = useStartDriverSession();
-  const endMut = useEndDriverSession();
+  const logMut = useStartDriverSession();
 
-  const selectedDevice = devices.find((d) => d.device_id === selectedDeviceId);
-  const isLoading = devicesLoading || projectsLoading || leadersLoading;
-  const isReady = !!selectedDriver && !!selectedDeviceId;
+  const selectedDevice    = devices.find((d) => d.device_id === selectedDeviceId);
+  const isLoading         = devicesLoading || projectsLoading || leadersLoading;
+  const isReady           = !!selectedDriver && !!selectedDeviceId;
 
-  const activeSession = useMemo(() => {
-    if (!selectedDriver || !selectedDeviceId) return null;
-    return (
-      dateSessions.find(
-        (s) =>
-          s.driver_name === selectedDriver &&
-          s.device_id === selectedDeviceId &&
-          !s.ended_at,
-      ) ?? null
-    );
-  }, [dateSessions, selectedDriver, selectedDeviceId]);
+  const selectedDateOpt   = dateOptions.find((o) => o.value === selectedDate) ?? dateOptions[0];
 
-  const selectedDateLabel = useMemo(
-    () => dateOptions.find((o) => o.value === selectedDate)?.label ?? selectedDate,
-    [dateOptions, selectedDate],
+  const alreadyLogged = useMemo(
+    () =>
+      dateSessions.some(
+        (s) => s.driver_name === selectedDriver && s.device_id === selectedDeviceId,
+      ),
+    [dateSessions, selectedDriver, selectedDeviceId],
   );
 
   const pickerData = useMemo<string[]>(() => {
@@ -134,17 +102,6 @@ export default function ShiftScreen() {
     if (modalType === "project") return ["", ...projects.map((p) => p.project_number)];
     return [];
   }, [modalType, dateOptions, teamLeaders, devices, projects]);
-
-  const showSuccess = (msg: string) => {
-    setSuccessMsg(msg);
-    setErrorMsg("");
-    setTimeout(() => setSuccessMsg(""), 3500);
-  };
-
-  const showError = (msg: string) => {
-    setErrorMsg(msg);
-    setSuccessMsg("");
-  };
 
   const handlePickerSelect = (value: string) => {
     if (modalType === "date") {
@@ -159,42 +116,38 @@ export default function ShiftScreen() {
       setSelectedProject(value);
     }
     setModalType(null);
+    setErrorMsg("");
+    setSuccessMsg("");
   };
 
-  const handleStartShift = async () => {
+  const handleSubmit = async () => {
     if (!isReady) return;
     setErrorMsg("");
+    setSuccessMsg("");
     try {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      await startMut.mutateAsync({
+      await logMut.mutateAsync({
         data: {
-          driver_name: selectedDriver,
-          device_id: selectedDeviceId,
+          driver_name:    selectedDriver,
+          device_id:      selectedDeviceId,
           project_number: selectedProject || "",
-          shift_date: selectedDate,
+          shift_date:     selectedDate,
         },
       });
       await refetchSessions();
-      showSuccess("Shift started!");
+      setSuccessMsg(
+        `Logged: ${selectedDriver} · ${selectedDevice?.display_name ?? selectedDeviceId}${selectedProject ? ` · ${selectedProject}` : ""} on ${selectedDateOpt.short}`,
+      );
+      setSelectedDriver("");
+      setSelectedDeviceId("");
+      setSelectedProject("");
     } catch {
-      showError("Failed to start shift. Check connection and try again.");
-    }
-  };
-
-  const handleEndShift = async () => {
-    if (!activeSession) return;
-    setErrorMsg("");
-    try {
-      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      await endMut.mutateAsync({ id: activeSession.id });
-      await refetchSessions();
-      showSuccess("Shift ended.");
-    } catch {
-      showError("Failed to end shift. Try again.");
+      setErrorMsg("Failed to save. Check your connection and try again.");
     }
   };
 
   const s = makeStyles(colors, insets);
+  const isPast = selectedDate !== todayStr();
 
   return (
     <View style={s.root}>
@@ -209,57 +162,33 @@ export default function ShiftScreen() {
           <View style={s.headerIcon}>
             <Feather name="truck" size={20} color={colors.primary} />
           </View>
-          <Text style={s.headerTitle}>Shift Log</Text>
+          <Text style={s.headerTitle}>Truck Log</Text>
         </View>
 
-        {/* Clock */}
-        <View style={s.clockCard}>
-          <Text style={s.clockTime}>{fmtTime(now)}</Text>
-          <Text style={s.clockDate}>{fmtDate(now)}</Text>
-        </View>
-
-        {/* Active session banner */}
-        {activeSession ? (
-          <View style={s.activeBanner}>
-            <View style={s.activeBannerRow}>
-              <View style={s.activeDot} />
-              <Text style={s.activeLabel}>SHIFT ACTIVE</Text>
-            </View>
-            <Text style={s.activeName}>{activeSession.driver_name}</Text>
-            <Text style={s.activeMeta}>
-              {selectedDevice?.display_name ?? activeSession.device_id}
-              {activeSession.project_number ? ` · ${activeSession.project_number}` : ""}
-            </Text>
-            <Text style={s.activeTime}>Since {fmtSessionTime(activeSession.started_at)}</Text>
-          </View>
-        ) : null}
-
-        {/* Selectors */}
-        <View style={s.section}>
-          <Text style={s.sectionLabel}>SHIFT DETAILS</Text>
-
-          {/* Date */}
-          <TouchableOpacity
-            style={[s.selectorCard, selectedDate !== todayStr() && s.selectorCardBackdate]}
-            onPress={() => setModalType("date")}
-            activeOpacity={0.75}
-            testID="select-date"
-          >
-            <View style={[s.selectorIconBox, selectedDate !== todayStr() && s.selectorIconBoxBackdate]}>
-              <Feather
-                name="calendar"
-                size={18}
-                color={selectedDate !== todayStr() ? "#F59E0B" : colors.mutedForeground}
-              />
-            </View>
-            <View style={s.selectorText}>
-              <Text style={s.selectorHint}>Date</Text>
-              <Text style={[s.selectorVal, selectedDate !== todayStr() && s.selectorValBackdate]}>
-                {selectedDateLabel}
+        {/* Date card — prominent, full-width tap target */}
+        <TouchableOpacity
+          style={[s.dateCard, isPast && s.dateCardPast]}
+          onPress={() => setModalType("date")}
+          activeOpacity={0.75}
+          testID="select-date"
+        >
+          <View style={s.dateCardLeft}>
+            <Feather name="calendar" size={20} color={isPast ? "#F59E0B" : colors.primary} />
+            <View>
+              <Text style={[s.dateCardLabel, isPast && s.dateCardLabelPast]}>
+                {selectedDateOpt.label}
               </Text>
+              {isPast && (
+                <Text style={s.dateCardSub}>Backdating — tap to change</Text>
+              )}
             </View>
-            <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
-          </TouchableOpacity>
+          </View>
+          <Feather name="chevron-down" size={18} color={isPast ? "#F59E0B" : colors.mutedForeground} />
+        </TouchableOpacity>
+
+        {/* Assignment form */}
+        <View style={s.section}>
+          <Text style={s.sectionLabel}>ASSIGN TRUCK</Text>
 
           {isLoading ? (
             <ActivityIndicator color={colors.primary} style={{ marginVertical: 24 }} />
@@ -272,11 +201,7 @@ export default function ShiftScreen() {
                 testID="select-driver"
               >
                 <View style={[s.selectorIconBox, !!selectedDriver && s.selectorIconBoxActive]}>
-                  <Feather
-                    name="user"
-                    size={18}
-                    color={selectedDriver ? colors.primary : colors.mutedForeground}
-                  />
+                  <Feather name="user" size={18} color={selectedDriver ? colors.primary : colors.mutedForeground} />
                 </View>
                 <View style={s.selectorText}>
                   <Text style={s.selectorHint}>Driver</Text>
@@ -294,11 +219,7 @@ export default function ShiftScreen() {
                 testID="select-truck"
               >
                 <View style={[s.selectorIconBox, !!selectedDeviceId && s.selectorIconBoxActive]}>
-                  <Feather
-                    name="truck"
-                    size={18}
-                    color={selectedDeviceId ? colors.primary : colors.mutedForeground}
-                  />
+                  <Feather name="truck" size={18} color={selectedDeviceId ? colors.primary : colors.mutedForeground} />
                 </View>
                 <View style={s.selectorText}>
                   <Text style={s.selectorHint}>Truck</Text>
@@ -316,11 +237,7 @@ export default function ShiftScreen() {
                 testID="select-project"
               >
                 <View style={[s.selectorIconBox, !!selectedProject && s.selectorIconBoxActive]}>
-                  <Feather
-                    name="briefcase"
-                    size={18}
-                    color={selectedProject ? colors.primary : colors.mutedForeground}
-                  />
+                  <Feather name="briefcase" size={18} color={selectedProject ? colors.primary : colors.mutedForeground} />
                 </View>
                 <View style={s.selectorText}>
                   <Text style={s.selectorHint}>Project</Text>
@@ -333,6 +250,16 @@ export default function ShiftScreen() {
             </>
           )}
         </View>
+
+        {/* Duplicate warning */}
+        {alreadyLogged && isReady && (
+          <View style={s.warnBanner}>
+            <Feather name="alert-triangle" size={14} color="#F59E0B" />
+            <Text style={s.warnText}>
+              Already logged for this driver + truck on {selectedDateOpt.short}
+            </Text>
+          </View>
+        )}
 
         {/* Feedback */}
         {errorMsg ? (
@@ -347,69 +274,41 @@ export default function ShiftScreen() {
           </View>
         ) : null}
 
-        {/* Action button */}
-        {activeSession ? (
-          <TouchableOpacity
-            style={s.endBtn}
-            onPress={handleEndShift}
-            disabled={endMut.isPending}
-            activeOpacity={0.85}
-            testID="end-shift-btn"
-          >
-            {endMut.isPending ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <>
-                <Feather name="square" size={20} color="#FFFFFF" />
-                <Text style={[s.btnText, { color: "#FFFFFF" }]}>End Shift</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity
-            style={[s.startBtn, !isReady && s.btnDisabled]}
-            onPress={handleStartShift}
-            disabled={!isReady || startMut.isPending}
-            activeOpacity={0.85}
-            testID="start-shift-btn"
-          >
-            {startMut.isPending ? (
-              <ActivityIndicator color="#0F1923" />
-            ) : (
-              <>
-                <Feather
-                  name="play"
-                  size={20}
-                  color={isReady ? "#0F1923" : colors.mutedForeground}
-                />
-                <Text style={[s.btnText, !isReady && s.btnTextDisabled]}>Start Shift</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        )}
+        {/* Submit */}
+        <TouchableOpacity
+          style={[s.submitBtn, !isReady && s.submitBtnDisabled]}
+          onPress={handleSubmit}
+          disabled={!isReady || logMut.isPending}
+          activeOpacity={0.85}
+          testID="submit-btn"
+        >
+          {logMut.isPending ? (
+            <ActivityIndicator color="#0F1923" />
+          ) : (
+            <>
+              <Feather name="check" size={20} color={isReady ? "#0F1923" : colors.mutedForeground} />
+              <Text style={[s.submitBtnText, !isReady && s.submitBtnTextDisabled]}>Log Day</Text>
+            </>
+          )}
+        </TouchableOpacity>
 
-        {/* Sessions for selected date */}
+        {/* Logged entries for selected date */}
         {dateSessions.length > 0 && (
           <View style={s.section}>
             <Text style={s.sectionLabel}>
-              {selectedDate === todayStr() ? "TODAY'S SESSIONS" : selectedDateLabel.toUpperCase()}
+              {isPast ? `LOGGED FOR ${selectedDateOpt.short.toUpperCase()}` : "LOGGED TODAY"}
             </Text>
-            {dateSessions.slice(0, 8).map((sess) => (
-              <View key={sess.id} style={s.sessionRow}>
-                <View
-                  style={[s.sessionDot, sess.ended_at ? s.sessionDotDone : s.sessionDotLive]}
-                />
-                <View style={s.sessionInfo}>
-                  <Text style={s.sessionName}>{sess.driver_name}</Text>
-                  <Text style={s.sessionMeta}>
+            {dateSessions.map((sess) => (
+              <View key={sess.id} style={s.entryRow}>
+                <View style={s.entryDot} />
+                <View style={s.entryInfo}>
+                  <Text style={s.entryDriver}>{sess.driver_name}</Text>
+                  <Text style={s.entryMeta}>
                     {devices.find((d) => d.device_id === sess.device_id)?.display_name ?? sess.device_id}
                     {sess.project_number ? ` · ${sess.project_number}` : ""}
                   </Text>
                 </View>
-                <Text style={s.sessionTime}>
-                  {fmtSessionTime(sess.started_at)}
-                  {sess.ended_at ? ` – ${fmtSessionTime(sess.ended_at)}` : " →"}
-                </Text>
+                <Feather name="check-circle" size={16} color="#10B981" />
               </View>
             ))}
           </View>
@@ -448,10 +347,10 @@ export default function ShiftScreen() {
               keyExtractor={(item, i) => `${item}_${i}`}
               renderItem={({ item }) => {
                 let selected = false;
-                if (modalType === "driver") selected = item === selectedDriver;
-                else if (modalType === "truck")
-                  selected = item === (selectedDevice?.display_name ?? "");
-                else if (modalType === "project") selected = item === selectedProject;
+                if (modalType === "date")    selected = item === selectedDateOpt.label;
+                if (modalType === "driver")  selected = item === selectedDriver;
+                if (modalType === "truck")   selected = item === (selectedDevice?.display_name ?? "");
+                if (modalType === "project") selected = item === selectedProject;
                 return (
                   <TouchableOpacity
                     style={[s.pickerRow, selected && s.pickerRowSelected]}
@@ -461,9 +360,7 @@ export default function ShiftScreen() {
                     <Text style={[s.pickerText, selected && s.pickerTextSelected]}>
                       {item || "(None)"}
                     </Text>
-                    {selected && (
-                      <Feather name="check" size={16} color={colors.primary} />
-                    )}
+                    {selected && <Feather name="check" size={16} color={colors.primary} />}
                   </TouchableOpacity>
                 );
               }}
@@ -511,58 +408,34 @@ function makeStyles(c: Colors, insets: Insets) {
       letterSpacing: -0.5,
     },
 
-    clockCard: {
-      backgroundColor: c.card,
-      borderRadius: 20,
-      paddingVertical: 24,
-      paddingHorizontal: 20,
+    dateCard: {
+      flexDirection: "row",
       alignItems: "center",
-      marginBottom: 16,
-      borderWidth: 1,
-      borderColor: c.border,
+      justifyContent: "space-between",
+      backgroundColor: c.card,
+      borderRadius: 18,
+      paddingVertical: 20,
+      paddingHorizontal: 20,
+      marginBottom: 20,
+      borderWidth: 1.5,
+      borderColor: c.primary + "50",
     },
-    clockTime: {
-      fontSize: 52,
+    dateCardPast: { borderColor: "#F59E0B50", backgroundColor: "#F59E0B08" },
+    dateCardLeft: { flexDirection: "row", alignItems: "center", gap: 14 },
+    dateCardLabel: {
+      fontSize: 18,
       fontFamily: "Inter_700Bold",
       color: c.foreground,
-      letterSpacing: -2,
+      letterSpacing: -0.3,
     },
-    clockDate: {
-      fontSize: 15,
+    dateCardLabelPast: { color: "#F59E0B" },
+    dateCardSub: {
+      fontSize: 11,
       fontFamily: "Inter_400Regular",
-      color: c.mutedForeground,
-      marginTop: 4,
+      color: "#F59E0B",
+      marginTop: 2,
+      opacity: 0.8,
     },
-
-    activeBanner: {
-      backgroundColor: "#0A2B1E",
-      borderRadius: 16,
-      padding: 18,
-      marginBottom: 16,
-      borderWidth: 1,
-      borderColor: "#10B98140",
-    },
-    activeBannerRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
-    activeDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#10B981" },
-    activeLabel: {
-      fontSize: 10,
-      fontFamily: "Inter_600SemiBold",
-      color: "#10B981",
-      letterSpacing: 1.5,
-    },
-    activeName: {
-      fontSize: 20,
-      fontFamily: "Inter_700Bold",
-      color: "#F1F5F9",
-      marginBottom: 2,
-    },
-    activeMeta: {
-      fontSize: 13,
-      fontFamily: "Inter_400Regular",
-      color: "#86EFAC",
-      marginBottom: 4,
-    },
-    activeTime: { fontSize: 12, fontFamily: "Inter_400Regular", color: "#4ADE80" + "CC" },
 
     section: { marginBottom: 16 },
     sectionLabel: {
@@ -585,9 +458,6 @@ function makeStyles(c: Colors, insets: Insets) {
       borderColor: c.border,
     },
     selectorCardActive: { borderColor: c.primary + "40" },
-    selectorCardBackdate: { borderColor: "#F59E0B40" },
-    selectorIconBoxBackdate: { backgroundColor: "#F59E0B20" },
-    selectorValBackdate: { color: "#F59E0B" },
     selectorIconBox: {
       width: 40,
       height: 40,
@@ -606,6 +476,20 @@ function makeStyles(c: Colors, insets: Insets) {
     },
     selectorVal: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: c.foreground },
     selectorValEmpty: { color: c.mutedForeground, fontFamily: "Inter_400Regular" },
+
+    warnBanner: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      backgroundColor: "#F59E0B15",
+      borderRadius: 12,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      marginBottom: 12,
+      borderWidth: 1,
+      borderColor: "#F59E0B40",
+    },
+    warnText: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#F59E0B", flex: 1 },
 
     errorBanner: {
       flexDirection: "row",
@@ -634,7 +518,7 @@ function makeStyles(c: Colors, insets: Insets) {
     },
     successText: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#10B981", flex: 1 },
 
-    startBtn: {
+    submitBtn: {
       backgroundColor: c.primary,
       borderRadius: 18,
       height: 60,
@@ -644,46 +528,49 @@ function makeStyles(c: Colors, insets: Insets) {
       gap: 10,
       marginBottom: 24,
     },
-    endBtn: {
-      backgroundColor: "#EF4444",
-      borderRadius: 18,
-      height: 60,
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 10,
-      marginBottom: 24,
+    submitBtnDisabled: { backgroundColor: c.secondary, borderWidth: 1, borderColor: c.border },
+    submitBtnText: {
+      fontSize: 17,
+      fontFamily: "Inter_700Bold",
+      color: "#0F1923",
+      letterSpacing: -0.3,
     },
-    btnDisabled: { backgroundColor: c.secondary },
-    btnText: { fontSize: 17, fontFamily: "Inter_700Bold", color: "#0F1923" },
-    btnTextDisabled: { color: c.mutedForeground },
+    submitBtnTextDisabled: { color: c.mutedForeground },
 
-    sessionRow: {
+    entryRow: {
       flexDirection: "row",
       alignItems: "center",
       gap: 12,
-      paddingVertical: 12,
-      borderBottomWidth: 1,
-      borderBottomColor: c.border + "60",
+      backgroundColor: c.card,
+      borderRadius: 12,
+      padding: 14,
+      marginBottom: 8,
+      borderWidth: 1,
+      borderColor: c.border,
     },
-    sessionDot: { width: 8, height: 8, borderRadius: 4 },
-    sessionDotLive: { backgroundColor: "#10B981" },
-    sessionDotDone: { backgroundColor: c.mutedForeground },
-    sessionInfo: { flex: 1 },
-    sessionName: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: c.foreground },
-    sessionMeta: { fontSize: 12, fontFamily: "Inter_400Regular", color: c.mutedForeground },
-    sessionTime: { fontSize: 11, fontFamily: "Inter_500Medium", color: c.mutedForeground },
+    entryDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: "#10B981",
+    },
+    entryInfo: { flex: 1 },
+    entryDriver: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: c.foreground },
+    entryMeta: { fontSize: 12, fontFamily: "Inter_400Regular", color: c.mutedForeground, marginTop: 2 },
 
     modalBg: {
       flex: 1,
-      backgroundColor: "#00000080",
       justifyContent: "flex-end",
+      backgroundColor: "rgba(0,0,0,0.5)",
     },
     modalSheet: {
       backgroundColor: c.background,
       borderTopLeftRadius: 24,
       borderTopRightRadius: 24,
-      maxHeight: "80%",
+      maxHeight: "75%",
+      borderWidth: 1,
+      borderColor: c.border,
+      borderBottomWidth: 0,
     },
     modalHandle: {
       width: 36,
@@ -701,21 +588,28 @@ function makeStyles(c: Colors, insets: Insets) {
       paddingHorizontal: 20,
       paddingVertical: 16,
       borderBottomWidth: 1,
-      borderBottomColor: c.border,
+      borderColor: c.border,
     },
     modalTitle: { fontSize: 18, fontFamily: "Inter_700Bold", color: c.foreground },
-    modalCloseBtn: { padding: 4 },
+    modalCloseBtn: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      backgroundColor: c.secondary,
+      alignItems: "center",
+      justifyContent: "center",
+    },
     pickerRow: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      paddingHorizontal: 16,
       paddingVertical: 16,
+      paddingHorizontal: 12,
       borderRadius: 12,
       marginBottom: 4,
     },
-    pickerRowSelected: { backgroundColor: c.primary + "20" },
-    pickerText: { fontSize: 16, fontFamily: "Inter_500Medium", color: c.foreground },
-    pickerTextSelected: { color: c.primary, fontFamily: "Inter_600SemiBold" },
+    pickerRowSelected: { backgroundColor: c.primary + "15" },
+    pickerText: { fontSize: 16, fontFamily: "Inter_400Regular", color: c.foreground },
+    pickerTextSelected: { fontFamily: "Inter_600SemiBold", color: c.primary },
   });
 }
