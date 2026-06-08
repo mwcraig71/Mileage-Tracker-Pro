@@ -6,19 +6,21 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface LogEntry {
+export interface Annotation {
   id: number;
+  period_id: number;
   device_id: string;
   device_name: string;
-  start_date: string;
-  end_date: string;
-  begin_odometer: number;
-  end_odometer: number;
+  date: string;
+  begin_odometer?: number | null;
+  end_odometer?: number | null;
+  gps_miles?: number | null;
   indirect_miles: number;
   personal_miles: number;
   direct_miles: number;
-  total_miles: number;
   project_number: string;
   team_leader_name: string;
-  created_at: string;
+  is_exported: boolean;
+  created_at?: string;
+  updated_at?: string;
 }

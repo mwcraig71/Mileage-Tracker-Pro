@@ -60,35 +60,75 @@ export interface TeamLeaderInput {
   name: string;
 }
 
-export interface LogEntry {
+export interface Period {
   id: number;
-  device_id: string;
-  device_name: string;
-  start_date: string;
-  end_date: string;
-  begin_odometer: number;
-  end_odometer: number;
-  indirect_miles: number;
-  personal_miles: number;
-  direct_miles: number;
-  total_miles: number;
-  project_number: string;
-  team_leader_name: string;
+  label: string;
+  month_key: string;
+  finalized: boolean;
+  finalized_at?: string | null;
   created_at: string;
 }
 
-export interface LogEntryInput {
+export interface PeriodInput {
+  month_key: string;
+}
+
+export interface Annotation {
+  id: number;
+  period_id: number;
   device_id: string;
   device_name: string;
-  start_date: string;
-  end_date: string;
-  begin_odometer: number;
-  end_odometer: number;
+  date: string;
+  begin_odometer?: number | null;
+  end_odometer?: number | null;
+  gps_miles?: number | null;
   indirect_miles: number;
   personal_miles: number;
   direct_miles: number;
   project_number: string;
   team_leader_name: string;
+  is_exported: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface AnnotationInput {
+  period_id: number;
+  device_id: string;
+  device_name?: string;
+  date: string;
+  begin_odometer?: number | null;
+  end_odometer?: number | null;
+  gps_miles?: number | null;
+  indirect_miles?: number;
+  personal_miles?: number;
+  direct_miles?: number;
+  project_number?: string;
+  team_leader_name?: string;
+}
+
+export interface AnnotationUpdate {
+  indirect_miles?: number;
+  personal_miles?: number;
+  direct_miles?: number;
+  project_number?: string;
+  team_leader_name?: string;
+}
+
+export interface MarkExportedInput {
+  annotation_ids: number[];
+}
+
+export interface MarkExportedResult {
+  updated: number;
+}
+
+export interface PasswordVerifyInput {
+  password: string;
+}
+
+export interface PasswordVerifyResult {
+  valid: boolean;
 }
 
 export type GetMileageSummaryParams = {

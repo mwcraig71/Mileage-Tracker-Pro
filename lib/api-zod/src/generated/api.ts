@@ -109,50 +109,151 @@ export const CreateTeamLeaderBody = zod.object({
 
 
 /**
- * @summary List all mileage log entries
+ * @summary List all periods
  */
-export const ListLogEntriesResponseItem = zod.object({
+export const ListPeriodsResponseItem = zod.object({
   "id": zod.number(),
-  "device_id": zod.string(),
-  "device_name": zod.string(),
-  "start_date": zod.string(),
-  "end_date": zod.string(),
-  "begin_odometer": zod.number(),
-  "end_odometer": zod.number(),
-  "indirect_miles": zod.number(),
-  "personal_miles": zod.number(),
-  "direct_miles": zod.number(),
-  "total_miles": zod.number(),
-  "project_number": zod.string(),
-  "team_leader_name": zod.string(),
+  "label": zod.string(),
+  "month_key": zod.string(),
+  "finalized": zod.boolean(),
+  "finalized_at": zod.string().nullish(),
   "created_at": zod.string()
 })
-export const ListLogEntriesResponse = zod.array(ListLogEntriesResponseItem)
+export const ListPeriodsResponse = zod.array(ListPeriodsResponseItem)
 
 
 /**
- * @summary Create a mileage log entry
+ * @summary Get or create a period by month_key
  */
-export const CreateLogEntryBody = zod.object({
-  "device_id": zod.string(),
-  "device_name": zod.string(),
-  "start_date": zod.string(),
-  "end_date": zod.string(),
-  "begin_odometer": zod.number(),
-  "end_odometer": zod.number(),
-  "indirect_miles": zod.number(),
-  "personal_miles": zod.number(),
-  "direct_miles": zod.number(),
-  "project_number": zod.string(),
-  "team_leader_name": zod.string()
+export const GetOrCreatePeriodBody = zod.object({
+  "month_key": zod.string()
 })
 
 
 /**
- * @summary Delete a log entry
+ * @summary List all annotations for a period
  */
-export const DeleteLogEntryParams = zod.object({
+export const ListPeriodAnnotationsParams = zod.object({
   "id": zod.coerce.number()
+})
+
+export const ListPeriodAnnotationsResponseItem = zod.object({
+  "id": zod.number(),
+  "period_id": zod.number(),
+  "device_id": zod.string(),
+  "device_name": zod.string(),
+  "date": zod.string(),
+  "begin_odometer": zod.number().nullish(),
+  "end_odometer": zod.number().nullish(),
+  "gps_miles": zod.number().nullish(),
+  "indirect_miles": zod.number(),
+  "personal_miles": zod.number(),
+  "direct_miles": zod.number(),
+  "project_number": zod.string(),
+  "team_leader_name": zod.string(),
+  "is_exported": zod.boolean(),
+  "created_at": zod.string().optional(),
+  "updated_at": zod.string().optional()
+})
+export const ListPeriodAnnotationsResponse = zod.array(ListPeriodAnnotationsResponseItem)
+
+
+/**
+ * @summary Finalize (lock) a period
+ */
+export const FinalizePeriodParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const FinalizePeriodResponse = zod.object({
+  "id": zod.number(),
+  "label": zod.string(),
+  "month_key": zod.string(),
+  "finalized": zod.boolean(),
+  "finalized_at": zod.string().nullish(),
+  "created_at": zod.string()
+})
+
+
+/**
+ * @summary Mark annotations as exported
+ */
+export const MarkAnnotationsExportedParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const MarkAnnotationsExportedBody = zod.object({
+  "annotation_ids": zod.array(zod.number())
+})
+
+export const MarkAnnotationsExportedResponse = zod.object({
+  "updated": zod.number()
+})
+
+
+/**
+ * @summary Create or update a row annotation
+ */
+export const UpsertAnnotationBody = zod.object({
+  "period_id": zod.number(),
+  "device_id": zod.string(),
+  "device_name": zod.string().optional(),
+  "date": zod.string(),
+  "begin_odometer": zod.number().nullish(),
+  "end_odometer": zod.number().nullish(),
+  "gps_miles": zod.number().nullish(),
+  "indirect_miles": zod.number().optional(),
+  "personal_miles": zod.number().optional(),
+  "direct_miles": zod.number().optional(),
+  "project_number": zod.string().optional(),
+  "team_leader_name": zod.string().optional()
+})
+
+
+/**
+ * @summary Update an annotation (for editing finalized periods)
+ */
+export const UpdateAnnotationParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateAnnotationBody = zod.object({
+  "indirect_miles": zod.number().optional(),
+  "personal_miles": zod.number().optional(),
+  "direct_miles": zod.number().optional(),
+  "project_number": zod.string().optional(),
+  "team_leader_name": zod.string().optional()
+})
+
+export const UpdateAnnotationResponse = zod.object({
+  "id": zod.number(),
+  "period_id": zod.number(),
+  "device_id": zod.string(),
+  "device_name": zod.string(),
+  "date": zod.string(),
+  "begin_odometer": zod.number().nullish(),
+  "end_odometer": zod.number().nullish(),
+  "gps_miles": zod.number().nullish(),
+  "indirect_miles": zod.number(),
+  "personal_miles": zod.number(),
+  "direct_miles": zod.number(),
+  "project_number": zod.string(),
+  "team_leader_name": zod.string(),
+  "is_exported": zod.boolean(),
+  "created_at": zod.string().optional(),
+  "updated_at": zod.string().optional()
+})
+
+
+/**
+ * @summary Verify the manager password
+ */
+export const VerifyManagerPasswordBody = zod.object({
+  "password": zod.string()
+})
+
+export const VerifyManagerPasswordResponse = zod.object({
+  "valid": zod.boolean()
 })
 
 

@@ -20,14 +20,21 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  Annotation,
+  AnnotationInput,
+  AnnotationUpdate,
   GetMileageSummaryParams,
   GetOdometerRangeParams,
   GpsDevice,
   HealthStatus,
-  LogEntry,
-  LogEntryInput,
+  MarkExportedInput,
+  MarkExportedResult,
   MileageSummary,
   OdometerRange,
+  PasswordVerifyInput,
+  PasswordVerifyResult,
+  Period,
+  PeriodInput,
   Project,
   ProjectInput,
   TeamLeader,
@@ -664,20 +671,20 @@ export const useCreateTeamLeader = <TError = ErrorType<unknown>,
       return useMutation(getCreateTeamLeaderMutationOptions(options));
     }
 
-export const getListLogEntriesUrl = () => {
+export const getListPeriodsUrl = () => {
 
 
 
 
-  return `/api/log-entries`
+  return `/api/periods`
 }
 
 /**
- * @summary List all mileage log entries
+ * @summary List all periods
  */
-export const listLogEntries = async ( options?: RequestInit): Promise<LogEntry[]> => {
+export const listPeriods = async ( options?: RequestInit): Promise<Period[]> => {
 
-  return customFetch<LogEntry[]>(getListLogEntriesUrl(),
+  return customFetch<Period[]>(getListPeriodsUrl(),
   {
     ...options,
     method: 'GET'
@@ -690,45 +697,45 @@ export const listLogEntries = async ( options?: RequestInit): Promise<LogEntry[]
 
 
 
-export const getListLogEntriesQueryKey = () => {
+export const getListPeriodsQueryKey = () => {
     return [
-    `/api/log-entries`
+    `/api/periods`
     ] as const;
     }
 
 
-export const getListLogEntriesQueryOptions = <TData = Awaited<ReturnType<typeof listLogEntries>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listLogEntries>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getListPeriodsQueryOptions = <TData = Awaited<ReturnType<typeof listPeriods>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPeriods>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getListLogEntriesQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getListPeriodsQueryKey();
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof listLogEntries>>> = ({ signal }) => listLogEntries({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPeriods>>> = ({ signal }) => listPeriods({ signal, ...requestOptions });
 
 
 
 
 
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listLogEntries>>, TError, TData> & { queryKey: QueryKey }
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listPeriods>>, TError, TData> & { queryKey: QueryKey }
 }
 
-export type ListLogEntriesQueryResult = NonNullable<Awaited<ReturnType<typeof listLogEntries>>>
-export type ListLogEntriesQueryError = ErrorType<unknown>
+export type ListPeriodsQueryResult = NonNullable<Awaited<ReturnType<typeof listPeriods>>>
+export type ListPeriodsQueryError = ErrorType<unknown>
 
 
 /**
- * @summary List all mileage log entries
+ * @summary List all periods
  */
 
-export function useListLogEntries<TData = Awaited<ReturnType<typeof listLogEntries>>, TError = ErrorType<unknown>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listLogEntries>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export function useListPeriods<TData = Awaited<ReturnType<typeof listPeriods>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPeriods>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getListLogEntriesQueryOptions(options)
+  const queryOptions = getListPeriodsQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -741,37 +748,37 @@ export function useListLogEntries<TData = Awaited<ReturnType<typeof listLogEntri
 
 
 
-export const getCreateLogEntryUrl = () => {
+export const getGetOrCreatePeriodUrl = () => {
 
 
 
 
-  return `/api/log-entries`
+  return `/api/periods`
 }
 
 /**
- * @summary Create a mileage log entry
+ * @summary Get or create a period by month_key
  */
-export const createLogEntry = async (logEntryInput: LogEntryInput, options?: RequestInit): Promise<LogEntry> => {
+export const getOrCreatePeriod = async (periodInput: PeriodInput, options?: RequestInit): Promise<Period> => {
 
-  return customFetch<LogEntry>(getCreateLogEntryUrl(),
+  return customFetch<Period>(getGetOrCreatePeriodUrl(),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
-      logEntryInput,)
+      periodInput,)
   }
 );}
 
 
 
 
-export const getCreateLogEntryMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createLogEntry>>, TError,{data: BodyType<LogEntryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof createLogEntry>>, TError,{data: BodyType<LogEntryInput>}, TContext> => {
+export const getGetOrCreatePeriodMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getOrCreatePeriod>>, TError,{data: BodyType<PeriodInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof getOrCreatePeriod>>, TError,{data: BodyType<PeriodInput>}, TContext> => {
 
-const mutationKey = ['createLogEntry'];
+const mutationKey = ['getOrCreatePeriod'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -781,10 +788,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createLogEntry>>, {data: BodyType<LogEntryInput>}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getOrCreatePeriod>>, {data: BodyType<PeriodInput>}> = (props) => {
           const {data} = props ?? {};
 
-          return  createLogEntry(data,requestOptions)
+          return  getOrCreatePeriod(data,requestOptions)
         }
 
 
@@ -794,41 +801,41 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type CreateLogEntryMutationResult = NonNullable<Awaited<ReturnType<typeof createLogEntry>>>
-    export type CreateLogEntryMutationBody = BodyType<LogEntryInput>
-    export type CreateLogEntryMutationError = ErrorType<unknown>
+    export type GetOrCreatePeriodMutationResult = NonNullable<Awaited<ReturnType<typeof getOrCreatePeriod>>>
+    export type GetOrCreatePeriodMutationBody = BodyType<PeriodInput>
+    export type GetOrCreatePeriodMutationError = ErrorType<unknown>
 
     /**
- * @summary Create a mileage log entry
+ * @summary Get or create a period by month_key
  */
-export const useCreateLogEntry = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createLogEntry>>, TError,{data: BodyType<LogEntryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+export const useGetOrCreatePeriod = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getOrCreatePeriod>>, TError,{data: BodyType<PeriodInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
-        Awaited<ReturnType<typeof createLogEntry>>,
+        Awaited<ReturnType<typeof getOrCreatePeriod>>,
         TError,
-        {data: BodyType<LogEntryInput>},
+        {data: BodyType<PeriodInput>},
         TContext
       > => {
-      return useMutation(getCreateLogEntryMutationOptions(options));
+      return useMutation(getGetOrCreatePeriodMutationOptions(options));
     }
 
-export const getDeleteLogEntryUrl = (id: number,) => {
+export const getListPeriodAnnotationsUrl = (id: number,) => {
 
 
 
 
-  return `/api/log-entries/${id}`
+  return `/api/periods/${id}/annotations`
 }
 
 /**
- * @summary Delete a log entry
+ * @summary List all annotations for a period
  */
-export const deleteLogEntry = async (id: number, options?: RequestInit): Promise<void> => {
+export const listPeriodAnnotations = async (id: number, options?: RequestInit): Promise<Annotation[]> => {
 
-  return customFetch<void>(getDeleteLogEntryUrl(id),
+  return customFetch<Annotation[]>(getListPeriodAnnotationsUrl(id),
   {
     ...options,
-    method: 'DELETE'
+    method: 'GET'
 
 
   }
@@ -837,11 +844,88 @@ export const deleteLogEntry = async (id: number, options?: RequestInit): Promise
 
 
 
-export const getDeleteLogEntryMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteLogEntry>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof deleteLogEntry>>, TError,{id: number}, TContext> => {
 
-const mutationKey = ['deleteLogEntry'];
+export const getListPeriodAnnotationsQueryKey = (id: number,) => {
+    return [
+    `/api/periods/${id}/annotations`
+    ] as const;
+    }
+
+
+export const getListPeriodAnnotationsQueryOptions = <TData = Awaited<ReturnType<typeof listPeriodAnnotations>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPeriodAnnotations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListPeriodAnnotationsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPeriodAnnotations>>> = ({ signal }) => listPeriodAnnotations(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listPeriodAnnotations>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListPeriodAnnotationsQueryResult = NonNullable<Awaited<ReturnType<typeof listPeriodAnnotations>>>
+export type ListPeriodAnnotationsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List all annotations for a period
+ */
+
+export function useListPeriodAnnotations<TData = Awaited<ReturnType<typeof listPeriodAnnotations>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPeriodAnnotations>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListPeriodAnnotationsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getFinalizePeriodUrl = (id: number,) => {
+
+
+
+
+  return `/api/periods/${id}/finalize`
+}
+
+/**
+ * @summary Finalize (lock) a period
+ */
+export const finalizePeriod = async (id: number, options?: RequestInit): Promise<Period> => {
+
+  return customFetch<Period>(getFinalizePeriodUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getFinalizePeriodMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof finalizePeriod>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof finalizePeriod>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['finalizePeriod'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -851,10 +935,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteLogEntry>>, {id: number}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof finalizePeriod>>, {id: number}> = (props) => {
           const {id} = props ?? {};
 
-          return  deleteLogEntry(id,requestOptions)
+          return  finalizePeriod(id,requestOptions)
         }
 
 
@@ -864,21 +948,307 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type DeleteLogEntryMutationResult = NonNullable<Awaited<ReturnType<typeof deleteLogEntry>>>
+    export type FinalizePeriodMutationResult = NonNullable<Awaited<ReturnType<typeof finalizePeriod>>>
 
-    export type DeleteLogEntryMutationError = ErrorType<unknown>
+    export type FinalizePeriodMutationError = ErrorType<unknown>
 
     /**
- * @summary Delete a log entry
+ * @summary Finalize (lock) a period
  */
-export const useDeleteLogEntry = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteLogEntry>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+export const useFinalizePeriod = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof finalizePeriod>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
-        Awaited<ReturnType<typeof deleteLogEntry>>,
+        Awaited<ReturnType<typeof finalizePeriod>>,
         TError,
         {id: number},
         TContext
       > => {
-      return useMutation(getDeleteLogEntryMutationOptions(options));
+      return useMutation(getFinalizePeriodMutationOptions(options));
+    }
+
+export const getMarkAnnotationsExportedUrl = (id: number,) => {
+
+
+
+
+  return `/api/periods/${id}/mark-exported`
+}
+
+/**
+ * @summary Mark annotations as exported
+ */
+export const markAnnotationsExported = async (id: number,
+    markExportedInput: MarkExportedInput, options?: RequestInit): Promise<MarkExportedResult> => {
+
+  return customFetch<MarkExportedResult>(getMarkAnnotationsExportedUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      markExportedInput,)
+  }
+);}
+
+
+
+
+export const getMarkAnnotationsExportedMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof markAnnotationsExported>>, TError,{id: number;data: BodyType<MarkExportedInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof markAnnotationsExported>>, TError,{id: number;data: BodyType<MarkExportedInput>}, TContext> => {
+
+const mutationKey = ['markAnnotationsExported'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof markAnnotationsExported>>, {id: number;data: BodyType<MarkExportedInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  markAnnotationsExported(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type MarkAnnotationsExportedMutationResult = NonNullable<Awaited<ReturnType<typeof markAnnotationsExported>>>
+    export type MarkAnnotationsExportedMutationBody = BodyType<MarkExportedInput>
+    export type MarkAnnotationsExportedMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Mark annotations as exported
+ */
+export const useMarkAnnotationsExported = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof markAnnotationsExported>>, TError,{id: number;data: BodyType<MarkExportedInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof markAnnotationsExported>>,
+        TError,
+        {id: number;data: BodyType<MarkExportedInput>},
+        TContext
+      > => {
+      return useMutation(getMarkAnnotationsExportedMutationOptions(options));
+    }
+
+export const getUpsertAnnotationUrl = () => {
+
+
+
+
+  return `/api/annotations`
+}
+
+/**
+ * @summary Create or update a row annotation
+ */
+export const upsertAnnotation = async (annotationInput: AnnotationInput, options?: RequestInit): Promise<Annotation> => {
+
+  return customFetch<Annotation>(getUpsertAnnotationUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      annotationInput,)
+  }
+);}
+
+
+
+
+export const getUpsertAnnotationMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof upsertAnnotation>>, TError,{data: BodyType<AnnotationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof upsertAnnotation>>, TError,{data: BodyType<AnnotationInput>}, TContext> => {
+
+const mutationKey = ['upsertAnnotation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof upsertAnnotation>>, {data: BodyType<AnnotationInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  upsertAnnotation(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpsertAnnotationMutationResult = NonNullable<Awaited<ReturnType<typeof upsertAnnotation>>>
+    export type UpsertAnnotationMutationBody = BodyType<AnnotationInput>
+    export type UpsertAnnotationMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Create or update a row annotation
+ */
+export const useUpsertAnnotation = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof upsertAnnotation>>, TError,{data: BodyType<AnnotationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof upsertAnnotation>>,
+        TError,
+        {data: BodyType<AnnotationInput>},
+        TContext
+      > => {
+      return useMutation(getUpsertAnnotationMutationOptions(options));
+    }
+
+export const getUpdateAnnotationUrl = (id: number,) => {
+
+
+
+
+  return `/api/annotations/${id}`
+}
+
+/**
+ * @summary Update an annotation (for editing finalized periods)
+ */
+export const updateAnnotation = async (id: number,
+    annotationUpdate: AnnotationUpdate, options?: RequestInit): Promise<Annotation> => {
+
+  return customFetch<Annotation>(getUpdateAnnotationUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      annotationUpdate,)
+  }
+);}
+
+
+
+
+export const getUpdateAnnotationMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAnnotation>>, TError,{id: number;data: BodyType<AnnotationUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateAnnotation>>, TError,{id: number;data: BodyType<AnnotationUpdate>}, TContext> => {
+
+const mutationKey = ['updateAnnotation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateAnnotation>>, {id: number;data: BodyType<AnnotationUpdate>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateAnnotation(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateAnnotationMutationResult = NonNullable<Awaited<ReturnType<typeof updateAnnotation>>>
+    export type UpdateAnnotationMutationBody = BodyType<AnnotationUpdate>
+    export type UpdateAnnotationMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Update an annotation (for editing finalized periods)
+ */
+export const useUpdateAnnotation = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAnnotation>>, TError,{id: number;data: BodyType<AnnotationUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateAnnotation>>,
+        TError,
+        {id: number;data: BodyType<AnnotationUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateAnnotationMutationOptions(options));
+    }
+
+export const getVerifyManagerPasswordUrl = () => {
+
+
+
+
+  return `/api/config/verify-password`
+}
+
+/**
+ * @summary Verify the manager password
+ */
+export const verifyManagerPassword = async (passwordVerifyInput: PasswordVerifyInput, options?: RequestInit): Promise<PasswordVerifyResult> => {
+
+  return customFetch<PasswordVerifyResult>(getVerifyManagerPasswordUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      passwordVerifyInput,)
+  }
+);}
+
+
+
+
+export const getVerifyManagerPasswordMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof verifyManagerPassword>>, TError,{data: BodyType<PasswordVerifyInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof verifyManagerPassword>>, TError,{data: BodyType<PasswordVerifyInput>}, TContext> => {
+
+const mutationKey = ['verifyManagerPassword'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof verifyManagerPassword>>, {data: BodyType<PasswordVerifyInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  verifyManagerPassword(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type VerifyManagerPasswordMutationResult = NonNullable<Awaited<ReturnType<typeof verifyManagerPassword>>>
+    export type VerifyManagerPasswordMutationBody = BodyType<PasswordVerifyInput>
+    export type VerifyManagerPasswordMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Verify the manager password
+ */
+export const useVerifyManagerPassword = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof verifyManagerPassword>>, TError,{data: BodyType<PasswordVerifyInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof verifyManagerPassword>>,
+        TError,
+        {data: BodyType<PasswordVerifyInput>},
+        TContext
+      > => {
+      return useMutation(getVerifyManagerPasswordMutationOptions(options));
     }
 

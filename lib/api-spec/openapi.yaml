@@ -1,6 +1,5 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
   description: API specification
@@ -9,15 +8,12 @@ servers:
     description: Base API path
 tags:
   - name: health
-    description: Health operations
   - name: gps
-    description: GPS / One-Step GPS operations
   - name: projects
-    description: Project management
   - name: teamLeaders
-    description: Team leader management
-  - name: logEntries
-    description: Mileage log entry management
+  - name: periods
+  - name: annotations
+  - name: config
 paths:
   /healthz:
     get:
@@ -169,43 +165,43 @@ paths:
               schema:
                 $ref: "#/components/schemas/TeamLeader"
 
-  /log-entries:
+  /periods:
     get:
-      operationId: listLogEntries
-      tags: [logEntries]
-      summary: List all mileage log entries
+      operationId: listPeriods
+      tags: [periods]
+      summary: List all periods
       responses:
         "200":
-          description: List of log entries
+          description: List of periods
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/LogEntry"
+                  $ref: "#/components/schemas/Period"
     post:
-      operationId: createLogEntry
-      tags: [logEntries]
-      summary: Create a mileage log entry
+      operationId: getOrCreatePeriod
+      tags: [periods]
+      summary: Get or create a period by month_key
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/LogEntryInput"
+              $ref: "#/components/schemas/PeriodInput"
       responses:
         "201":
-          description: Created
+          description: Created or fetched
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/LogEntry"
+                $ref: "#/components/schemas/Period"
 
-  /log-entries/{id}:
-    delete:
-      operationId: deleteLogEntry
-      tags: [logEntries]
-      summary: Delete a log entry
+  /periods/{id}/annotations:
+    get:
+      operationId: listPeriodAnnotations
+      tags: [periods]
+      summary: List all annotations for a period
       parameters:
         - name: id
           in: path
@@ -213,25 +209,134 @@ paths:
           schema:
             type: integer
       responses:
-        "204":
-          description: Deleted
+        "200":
+          description: List of annotations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Annotation"
+
+  /periods/{id}/finalize:
+    post:
+      operationId: finalizePeriod
+      tags: [periods]
+      summary: Finalize (lock) a period
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Finalized period
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Period"
+
+  /periods/{id}/mark-exported:
+    post:
+      operationId: markAnnotationsExported
+      tags: [periods]
+      summary: Mark annotations as exported
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MarkExportedInput"
+      responses:
+        "200":
+          description: Number of rows updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarkExportedResult"
+
+  /annotations:
+    post:
+      operationId: upsertAnnotation
+      tags: [annotations]
+      summary: Create or update a row annotation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnnotationInput"
+      responses:
+        "201":
+          description: Upserted annotation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Annotation"
+
+  /annotations/{id}:
+    put:
+      operationId: updateAnnotation
+      tags: [annotations]
+      summary: Update an annotation (for editing finalized periods)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnnotationUpdate"
+      responses:
+        "200":
+          description: Updated annotation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Annotation"
+
+  /config/verify-password:
+    post:
+      operationId: verifyManagerPassword
+      tags: [config]
+      summary: Verify the manager password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordVerifyInput"
+      responses:
+        "200":
+          description: Verification result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PasswordVerifyResult"
 
 components:
   schemas:
     HealthStatus:
       type: object
+      required: [status]
       properties:
         status:
           type: string
-      required:
-        - status
 
     GpsDevice:
       type: object
-      required:
-        - device_id
-        - display_name
-        - active_state
+      required: [device_id, display_name, active_state]
       properties:
         device_id:
           type: string
@@ -242,13 +347,7 @@ components:
 
     OdometerRange:
       type: object
-      required:
-        - device_id
-        - from
-        - to
-        - begin_odometer_miles
-        - end_odometer_miles
-        - total_miles
+      required: [device_id, from, to, begin_odometer_miles, end_odometer_miles, total_miles]
       properties:
         device_id:
           type: string
@@ -265,11 +364,7 @@ components:
 
     DailyMileage:
       type: object
-      required:
-        - date
-        - start_odometer_miles
-        - end_odometer_miles
-        - miles_driven
+      required: [date, start_odometer_miles, end_odometer_miles, miles_driven]
       properties:
         date:
           type: string
@@ -282,13 +377,7 @@ components:
 
     MileageSummary:
       type: object
-      required:
-        - device_id
-        - display_name
-        - from
-        - to
-        - total_miles
-        - daily_logs
+      required: [device_id, display_name, from, to, total_miles, daily_logs]
       properties:
         device_id:
           type: string
@@ -307,10 +396,7 @@ components:
 
     Project:
       type: object
-      required:
-        - id
-        - project_number
-        - created_at
+      required: [id, project_number, created_at]
       properties:
         id:
           type: integer
@@ -321,18 +407,14 @@ components:
 
     ProjectInput:
       type: object
-      required:
-        - project_number
+      required: [project_number]
       properties:
         project_number:
           type: string
 
     TeamLeader:
       type: object
-      required:
-        - id
-        - name
-        - created_at
+      required: [id, name, created_at]
       properties:
         id:
           type: integer
@@ -343,86 +425,97 @@ components:
 
     TeamLeaderInput:
       type: object
-      required:
-        - name
+      required: [name]
       properties:
         name:
           type: string
 
-    LogEntry:
+    Period:
       type: object
-      required:
-        - id
-        - device_id
-        - device_name
-        - start_date
-        - end_date
-        - begin_odometer
-        - end_odometer
-        - indirect_miles
-        - personal_miles
-        - direct_miles
-        - total_miles
-        - project_number
-        - team_leader_name
-        - created_at
+      required: [id, label, month_key, finalized, created_at]
       properties:
         id:
+          type: integer
+        label:
+          type: string
+        month_key:
+          type: string
+        finalized:
+          type: boolean
+        finalized_at:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+
+    PeriodInput:
+      type: object
+      required: [month_key]
+      properties:
+        month_key:
+          type: string
+
+    Annotation:
+      type: object
+      required: [id, period_id, device_id, device_name, date, indirect_miles, personal_miles, direct_miles, project_number, team_leader_name, is_exported]
+      properties:
+        id:
+          type: integer
+        period_id:
           type: integer
         device_id:
           type: string
         device_name:
           type: string
-        start_date:
-          type: string
-        end_date:
+        date:
           type: string
         begin_odometer:
           type: number
+          nullable: true
         end_odometer:
           type: number
+          nullable: true
+        gps_miles:
+          type: number
+          nullable: true
         indirect_miles:
           type: number
         personal_miles:
           type: number
         direct_miles:
           type: number
-        total_miles:
-          type: number
         project_number:
           type: string
         team_leader_name:
           type: string
+        is_exported:
+          type: boolean
         created_at:
           type: string
+        updated_at:
+          type: string
 
-    LogEntryInput:
+    AnnotationInput:
       type: object
-      required:
-        - device_id
-        - device_name
-        - start_date
-        - end_date
-        - begin_odometer
-        - end_odometer
-        - indirect_miles
-        - personal_miles
-        - direct_miles
-        - project_number
-        - team_leader_name
+      required: [period_id, device_id, date]
       properties:
+        period_id:
+          type: integer
         device_id:
           type: string
         device_name:
           type: string
-        start_date:
-          type: string
-        end_date:
+        date:
           type: string
         begin_odometer:
           type: number
+          nullable: true
         end_odometer:
           type: number
+          nullable: true
+        gps_miles:
+          type: number
+          nullable: true
         indirect_miles:
           type: number
         personal_miles:
@@ -433,3 +526,47 @@ components:
           type: string
         team_leader_name:
           type: string
+
+    AnnotationUpdate:
+      type: object
+      properties:
+        indirect_miles:
+          type: number
+        personal_miles:
+          type: number
+        direct_miles:
+          type: number
+        project_number:
+          type: string
+        team_leader_name:
+          type: string
+
+    MarkExportedInput:
+      type: object
+      required: [annotation_ids]
+      properties:
+        annotation_ids:
+          type: array
+          items:
+            type: integer
+
+    MarkExportedResult:
+      type: object
+      required: [updated]
+      properties:
+        updated:
+          type: integer
+
+    PasswordVerifyInput:
+      type: object
+      required: [password]
+      properties:
+        password:
+          type: string
+
+    PasswordVerifyResult:
+      type: object
+      required: [valid]
+      properties:
+        valid:
+          type: boolean
