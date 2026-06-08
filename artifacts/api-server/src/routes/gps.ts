@@ -100,27 +100,33 @@ router.get("/mileage-summary", async (req, res) => {
     const ptData = await ptResponse.json() as { result_list: unknown[] };
     const points = ptData.result_list || [];
 
-    // Group by calendar date and compute daily mileage
-    const byDate: Record<string, number[]> = {};
-    for (const p of points as any[]) {
+    // Sort points chronologically by dt_tracker
+    const sortedPoints = (points as any[]).slice().sort((a, b) => {
+      return (a.dt_tracker || "").localeCompare(b.dt_tracker || "");
+    });
+
+    // Group by calendar date, keeping first and last odometer reading per day
+    const byDate: Record<string, { first: number; last: number }> = {};
+    for (const p of sortedPoints) {
       const odoMeters = p.device_point_detail?.vbus_odometer?.value;
       if (odoMeters == null || odoMeters === 0) continue;
       const date = (p.dt_tracker || "").substring(0, 10);
       if (!date) continue;
-      if (!byDate[date]) byDate[date] = [];
-      byDate[date].push(odoMeters);
+      if (!byDate[date]) {
+        byDate[date] = { first: odoMeters, last: odoMeters };
+      } else {
+        byDate[date].last = odoMeters;
+      }
     }
 
     const daily_logs = Object.entries(byDate)
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([date, readings]) => {
-        const startOdoMeters = Math.min(...readings);
-        const endOdoMeters = Math.max(...readings);
-        const milesDriven = metersToMiles(endOdoMeters - startOdoMeters);
+      .map(([date, { first, last }]) => {
+        const milesDriven = Math.max(0, metersToMiles(last - first));
         return {
           date,
-          start_odometer_miles: metersToMiles(startOdoMeters),
-          end_odometer_miles: metersToMiles(endOdoMeters),
+          start_odometer_miles: metersToMiles(first),
+          end_odometer_miles: metersToMiles(last),
           miles_driven: milesDriven,
         };
       });

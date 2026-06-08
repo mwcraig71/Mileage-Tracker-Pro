@@ -34,4 +34,3 @@ externalPort = 3000
 [userenv]
 
 [userenv.shared]
-ONESTEP_GPS_API_KEY = "dv8wTbYc3Fd5vCK9A8LEZsOqkdrMcZ4AWGqd15fyWuA"
