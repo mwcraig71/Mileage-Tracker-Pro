@@ -91,7 +91,7 @@ router.get("/mileage-summary", async (req, res) => {
     const dtTo = new Date(to);
     dtTo.setHours(23, 59, 59, 999);
 
-    const url = `${BASE_URL}/device-point?api-key=${apiKey}&device_id=${device_id}&dt_server_from=${dtFrom.toISOString()}&dt_server_to=${dtTo.toISOString()}&limit=5000&sort=dt_tracker,asc`;
+    const url = `${BASE_URL}/device-point?api-key=${apiKey}&device_id=${device_id}&dt_server_from=${dtFrom.toISOString()}&dt_server_to=${dtTo.toISOString()}&limit=5000`;
     const ptResponse = await fetch(url);
     if (!ptResponse.ok) {
       res.status(502).json({ error: "Failed to fetch device points" });
