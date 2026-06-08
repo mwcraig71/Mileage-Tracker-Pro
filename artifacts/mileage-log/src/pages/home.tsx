@@ -210,6 +210,9 @@ export default function Home() {
 
   const loadedPeriodRef  = useRef<number | null>(null);
   const loadedArchiveRef = useRef<number | null>(null);
+  // Tracks keys already auto-filled from driver sessions so the effect bails out
+  // immediately on subsequent renders when nothing new needs filling.
+  const autoFilledKeysRef = useRef<Set<string>>(new Set());
 
   // ── API queries / mutations ─────────────────────────────────────────────────
   const { data: devices = [],  isLoading: devicesLoading } = useGetGpsDevices();
@@ -354,6 +357,12 @@ export default function Home() {
     archiveEdits[key] ?? EMPTY_ANN, [archiveEdits]);
 
   // ── Auto-fill from driver sessions ──────────────────────────────────────────
+  // Reset the filled-keys tracker whenever the user resets the form so a new
+  // submission gets a fresh fill pass.
+  useEffect(() => {
+    if (!submitted) autoFilledKeysRef.current = new Set();
+  }, [submitted]);
+
   useEffect(() => {
     if (!submitted || allRows.length === 0 || driverSessions.length === 0) return;
 
@@ -377,8 +386,25 @@ export default function Home() {
 
     if (!prefilled.size) return;
 
-    setSessionPrefilled(prefilled);
-    setSessionMultiple(multiple);
+    // Guard: if every key was already processed on a previous run of this effect,
+    // bail out without calling setState at all. This prevents the loop that occurs
+    // when useQueries returns a new array reference on re-renders (making allRows
+    // a new reference, re-firing this effect, calling setState, causing another
+    // re-render, ad infinitum).
+    const hasNew = [...prefilled].some(k => !autoFilledKeysRef.current.has(k));
+    if (!hasNew) return;
+    prefilled.forEach(k => autoFilledKeysRef.current.add(k));
+
+    // Use functional updaters that bail out (return prev) when content is identical
+    // so React skips the re-render entirely when nothing actually changed.
+    setSessionPrefilled(prev => {
+      if (prev.size === prefilled.size && [...prefilled].every(k => prev.has(k))) return prev;
+      return prefilled;
+    });
+    setSessionMultiple(prev => {
+      if (prev.size === multiple.size && [...multiple].every(k => prev.has(k))) return prev;
+      return multiple;
+    });
     setAnnotations(prev => {
       let changed = false;
       const next = { ...prev };
@@ -389,7 +415,6 @@ export default function Home() {
           changed = true;
         }
       }
-      // Return prev (same reference) when nothing changed so React skips re-render.
       return changed ? next : prev;
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
