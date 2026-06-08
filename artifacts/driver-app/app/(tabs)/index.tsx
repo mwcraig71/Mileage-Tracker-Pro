@@ -25,7 +25,27 @@ import { useColors } from "@/hooks/useColors";
 
 type Colors = ReturnType<typeof useColors>;
 type Insets = { top: number; bottom: number; left: number; right: number };
-type ModalType = "driver" | "truck" | "project" | null;
+type ModalType = "date" | "driver" | "truck" | "project" | null;
+
+type DateOption = { value: string; label: string };
+
+function recentDates(count = 14): DateOption[] {
+  const DAYS   = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const result: DateOption[] = [];
+  const base = new Date();
+  for (let i = 0; i < count; i++) {
+    const d = new Date(base);
+    d.setDate(d.getDate() - i);
+    const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    let label: string;
+    if (i === 0)      label = `Today — ${MONTHS[d.getMonth()]} ${d.getDate()}`;
+    else if (i === 1) label = `Yesterday — ${MONTHS[d.getMonth()]} ${d.getDate()}`;
+    else              label = `${DAYS[d.getDay()]}, ${MONTHS[d.getMonth()]} ${d.getDate()}`;
+    result.push({ value, label });
+  }
+  return result;
+}
 
 function todayStr() {
   const d = new Date();
@@ -54,10 +74,12 @@ export default function ShiftScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
 
+  const [selectedDate, setSelectedDate] = useState<string>(todayStr);
   const [selectedDriver, setSelectedDriver] = useState<string>("");
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
   const [selectedProject, setSelectedProject] = useState<string>("");
   const [modalType, setModalType] = useState<ModalType>(null);
+  const dateOptions = useMemo(() => recentDates(14), []);
   const [now, setNow] = useState<Date>(new Date());
   const [errorMsg, setErrorMsg] = useState<string>("");
   const [successMsg, setSuccessMsg] = useState<string>("");
@@ -71,11 +93,10 @@ export default function ShiftScreen() {
   const { data: projects = [], isLoading: projectsLoading } = useListProjects();
   const { data: teamLeaders = [], isLoading: leadersLoading } = useListTeamLeaders();
 
-  const today = todayStr();
   const {
-    data: todaySessions = [],
+    data: dateSessions = [],
     refetch: refetchSessions,
-  } = useListDriverSessions({ from: today, to: today });
+  } = useListDriverSessions({ from: selectedDate, to: selectedDate });
 
   useEffect(() => {
     const t = setInterval(() => { refetchSessions(); }, 30000);
@@ -92,21 +113,27 @@ export default function ShiftScreen() {
   const activeSession = useMemo(() => {
     if (!selectedDriver || !selectedDeviceId) return null;
     return (
-      todaySessions.find(
+      dateSessions.find(
         (s) =>
           s.driver_name === selectedDriver &&
           s.device_id === selectedDeviceId &&
           !s.ended_at,
       ) ?? null
     );
-  }, [todaySessions, selectedDriver, selectedDeviceId]);
+  }, [dateSessions, selectedDriver, selectedDeviceId]);
+
+  const selectedDateLabel = useMemo(
+    () => dateOptions.find((o) => o.value === selectedDate)?.label ?? selectedDate,
+    [dateOptions, selectedDate],
+  );
 
   const pickerData = useMemo<string[]>(() => {
-    if (modalType === "driver") return teamLeaders.map((t) => t.name);
-    if (modalType === "truck") return devices.map((d) => d.display_name);
+    if (modalType === "date")    return dateOptions.map((o) => o.label);
+    if (modalType === "driver")  return teamLeaders.map((t) => t.name);
+    if (modalType === "truck")   return devices.map((d) => d.display_name);
     if (modalType === "project") return ["", ...projects.map((p) => p.project_number)];
     return [];
-  }, [modalType, teamLeaders, devices, projects]);
+  }, [modalType, dateOptions, teamLeaders, devices, projects]);
 
   const showSuccess = (msg: string) => {
     setSuccessMsg(msg);
@@ -120,11 +147,17 @@ export default function ShiftScreen() {
   };
 
   const handlePickerSelect = (value: string) => {
-    if (modalType === "driver") setSelectedDriver(value);
-    else if (modalType === "truck") {
+    if (modalType === "date") {
+      const opt = dateOptions.find((o) => o.label === value);
+      if (opt) setSelectedDate(opt.value);
+    } else if (modalType === "driver") {
+      setSelectedDriver(value);
+    } else if (modalType === "truck") {
       const dev = devices.find((d) => d.display_name === value);
       setSelectedDeviceId(dev?.device_id ?? "");
-    } else if (modalType === "project") setSelectedProject(value);
+    } else if (modalType === "project") {
+      setSelectedProject(value);
+    }
     setModalType(null);
   };
 
@@ -138,6 +171,7 @@ export default function ShiftScreen() {
           driver_name: selectedDriver,
           device_id: selectedDeviceId,
           project_number: selectedProject || "",
+          shift_date: selectedDate,
         },
       });
       await refetchSessions();
@@ -202,7 +236,31 @@ export default function ShiftScreen() {
 
         {/* Selectors */}
         <View style={s.section}>
-          <Text style={s.sectionLabel}>DRIVER INFO</Text>
+          <Text style={s.sectionLabel}>SHIFT DETAILS</Text>
+
+          {/* Date */}
+          <TouchableOpacity
+            style={[s.selectorCard, selectedDate !== todayStr() && s.selectorCardBackdate]}
+            onPress={() => setModalType("date")}
+            activeOpacity={0.75}
+            testID="select-date"
+          >
+            <View style={[s.selectorIconBox, selectedDate !== todayStr() && s.selectorIconBoxBackdate]}>
+              <Feather
+                name="calendar"
+                size={18}
+                color={selectedDate !== todayStr() ? "#F59E0B" : colors.mutedForeground}
+              />
+            </View>
+            <View style={s.selectorText}>
+              <Text style={s.selectorHint}>Date</Text>
+              <Text style={[s.selectorVal, selectedDate !== todayStr() && s.selectorValBackdate]}>
+                {selectedDateLabel}
+              </Text>
+            </View>
+            <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+          </TouchableOpacity>
+
           {isLoading ? (
             <ActivityIndicator color={colors.primary} style={{ marginVertical: 24 }} />
           ) : (
@@ -330,11 +388,13 @@ export default function ShiftScreen() {
           </TouchableOpacity>
         )}
 
-        {/* Today's sessions */}
-        {todaySessions.length > 0 && (
+        {/* Sessions for selected date */}
+        {dateSessions.length > 0 && (
           <View style={s.section}>
-            <Text style={s.sectionLabel}>TODAY'S SESSIONS</Text>
-            {todaySessions.slice(0, 8).map((sess) => (
+            <Text style={s.sectionLabel}>
+              {selectedDate === todayStr() ? "TODAY'S SESSIONS" : selectedDateLabel.toUpperCase()}
+            </Text>
+            {dateSessions.slice(0, 8).map((sess) => (
               <View key={sess.id} style={s.sessionRow}>
                 <View
                   style={[s.sessionDot, sess.ended_at ? s.sessionDotDone : s.sessionDotLive]}
@@ -342,8 +402,7 @@ export default function ShiftScreen() {
                 <View style={s.sessionInfo}>
                   <Text style={s.sessionName}>{sess.driver_name}</Text>
                   <Text style={s.sessionMeta}>
-                    {devices.find((d) => d.device_id === sess.device_id)?.display_name ??
-                      sess.device_id}
+                    {devices.find((d) => d.device_id === sess.device_id)?.display_name ?? sess.device_id}
                     {sess.project_number ? ` · ${sess.project_number}` : ""}
                   </Text>
                 </View>
@@ -372,11 +431,13 @@ export default function ShiftScreen() {
             <View style={s.modalHandle} />
             <View style={s.modalHead}>
               <Text style={s.modalTitle}>
-                {modalType === "driver"
-                  ? "Select Driver"
-                  : modalType === "truck"
-                    ? "Select Truck"
-                    : "Select Project"}
+                {modalType === "date"
+                  ? "Select Date"
+                  : modalType === "driver"
+                    ? "Select Driver"
+                    : modalType === "truck"
+                      ? "Select Truck"
+                      : "Select Project"}
               </Text>
               <TouchableOpacity onPress={() => setModalType(null)} style={s.modalCloseBtn}>
                 <Feather name="x" size={20} color={colors.mutedForeground} />
@@ -524,6 +585,9 @@ function makeStyles(c: Colors, insets: Insets) {
       borderColor: c.border,
     },
     selectorCardActive: { borderColor: c.primary + "40" },
+    selectorCardBackdate: { borderColor: "#F59E0B40" },
+    selectorIconBoxBackdate: { backgroundColor: "#F59E0B20" },
+    selectorValBackdate: { color: "#F59E0B" },
     selectorIconBox: {
       width: 40,
       height: 40,

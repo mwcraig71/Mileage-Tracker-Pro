@@ -10,4 +10,6 @@ export interface DriverSessionInput {
   driver_name: string;
   device_id: string;
   project_number?: string;
+  /** Date to backdate the shift to (YYYY-MM-DD). Defaults to today if omitted. */
+  shift_date?: string;
 }

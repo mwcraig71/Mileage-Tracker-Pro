@@ -37,10 +37,11 @@ router.get("/", async (req, res) => {
 });
 
 router.post("/", async (req, res) => {
-  const { driver_name, device_id, project_number } = req.body as {
+  const { driver_name, device_id, project_number, shift_date } = req.body as {
     driver_name?: string;
     device_id?: string;
     project_number?: string;
+    shift_date?: string; // YYYY-MM-DD — optional, defaults to today
   };
 
   if (!driver_name?.trim()) {
@@ -52,10 +53,21 @@ router.post("/", async (req, res) => {
     return;
   }
 
+  // If a past date is provided, use current time-of-day on that date so the
+  // session timestamp is realistic while still matching the intended date.
+  let startedAt: Date;
+  if (shift_date && /^\d{4}-\d{2}-\d{2}$/.test(shift_date)) {
+    const now = new Date();
+    const [y, m, d] = shift_date.split("-").map(Number);
+    startedAt = new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds());
+  } else {
+    startedAt = new Date();
+  }
+
   const result = await pool.query(
-    `INSERT INTO driver_sessions (driver_name, device_id, project_number)
-     VALUES ($1, $2, $3) RETURNING *`,
-    [driver_name.trim(), device_id.trim(), (project_number ?? "").trim()],
+    `INSERT INTO driver_sessions (driver_name, device_id, project_number, started_at)
+     VALUES ($1, $2, $3, $4) RETURNING *`,
+    [driver_name.trim(), device_id.trim(), (project_number ?? "").trim() || null, startedAt],
   );
   res.status(201).json(result.rows[0]);
 });

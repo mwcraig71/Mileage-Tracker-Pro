@@ -274,7 +274,8 @@ export const ListDriverSessionsResponse = zod.array(ListDriverSessionsResponseIt
 export const StartDriverSessionBody = zod.object({
   "driver_name": zod.string(),
   "device_id": zod.string(),
-  "project_number": zod.string().optional()
+  "project_number": zod.string().optional(),
+  "shift_date": zod.string().optional().describe('Date to backdate the shift to (YYYY-MM-DD). Defaults to today if omitted.')
 })
 
 

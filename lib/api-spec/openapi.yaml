@@ -738,3 +738,6 @@ components:
           type: string
         project_number:
           type: string
+        shift_date:
+          type: string
+          description: "Date to backdate the shift to (YYYY-MM-DD). Defaults to today if omitted."
