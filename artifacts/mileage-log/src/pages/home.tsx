@@ -294,11 +294,18 @@ export default function Home() {
 
   // ── GPS data ────────────────────────────────────────────────────────────────
   const activeIds = submitted ? selectedIds : [];
-  const queries   = useQueries({
-    queries: activeIds.map(deviceId =>
+  // Memoize the options array so useQueries gets a stable reference across renders.
+  // Without this, a new array identity on every render causes useQueries to return
+  // a new results array, which makes allRows recompute every render, which triggers
+  // the auto-fill effect every render → infinite setState loop.
+  const queriesOptions = useMemo(
+    () => activeIds.map(deviceId =>
       getGetMileageSummaryQueryOptions({ device_id: deviceId, from: dateFrom, to: dateTo })
     ),
-  });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeIds.join(","), dateFrom, dateTo],
+  );
+  const queries = useQueries({ queries: queriesOptions });
   const isLoadingGPS = submitted && queries.some(q => q.isFetching);
 
   const allRows = useMemo((): GpsRow[] => {
@@ -373,14 +380,17 @@ export default function Home() {
     setSessionPrefilled(prefilled);
     setSessionMultiple(multiple);
     setAnnotations(prev => {
+      let changed = false;
       const next = { ...prev };
       for (const [key, fill] of Object.entries(toFill)) {
         const cur = prev[key] ?? EMPTY_ANN;
         if (!cur.leader && !cur.project) {
           next[key] = { ...EMPTY_ANN, ...cur, leader: fill.leader, project: fill.project };
+          changed = true;
         }
       }
-      return next;
+      // Return prev (same reference) when nothing changed so React skips re-render.
+      return changed ? next : prev;
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allRows, driverSessions, submitted]);
