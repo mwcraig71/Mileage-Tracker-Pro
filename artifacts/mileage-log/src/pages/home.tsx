@@ -249,9 +249,9 @@ export default function Home() {
       const key = `${ann.device_id}_${ann.date}`;
       newSaved[key] = { id: ann.id, is_exported: ann.is_exported };
       newAnnotations[key] = {
-        indirect: ann.indirect_miles > 0 ? String(ann.indirect_miles) : "",
-        personal: ann.personal_miles > 0 ? String(ann.personal_miles) : "",
-        direct:   ann.direct_miles   > 0 ? String(ann.direct_miles)   : "",
+        indirect: ann.indirect_miles !== 0 ? String(ann.indirect_miles) : "",
+        personal: ann.personal_miles !== 0 ? String(ann.personal_miles) : "",
+        direct:   String(ann.direct_miles),
         project:  ann.project_number,
         leader:   ann.team_leader_name,
       };
