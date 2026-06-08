@@ -81,6 +81,45 @@ export async function runMigrations(): Promise<void> {
       )
     `);
 
+    // ── Backfill: migrate log_entries → periods + log_annotations ────────────
+    // Idempotent: uses ON CONFLICT DO NOTHING throughout.
+    // Creates one period per unique calendar month found in log_entries.start_date,
+    // then copies each log_entry row into log_annotations under the matching period.
+    // Runs only if log_entries has rows and will not overwrite any already-migrated
+    // annotation (protected by the UNIQUE(period_id, device_id, date) constraint).
+    await client.query(`
+      INSERT INTO periods (label, month_key)
+      SELECT DISTINCT
+        TRIM(TO_CHAR(start_date, 'Month')) || ' ' || TO_CHAR(start_date, 'YYYY') AS label,
+        TO_CHAR(start_date, 'YYYY-MM') AS month_key
+      FROM log_entries
+      ON CONFLICT (month_key) DO NOTHING
+    `);
+
+    await client.query(`
+      INSERT INTO log_annotations
+        (period_id, device_id, device_name, date,
+         begin_odometer, end_odometer, gps_miles,
+         indirect_miles, personal_miles, direct_miles,
+         project_number, team_leader_name)
+      SELECT
+        p.id,
+        le.device_id,
+        le.device_name,
+        le.start_date,
+        le.begin_odometer,
+        le.end_odometer,
+        NULL,
+        le.indirect_miles,
+        le.personal_miles,
+        le.direct_miles,
+        le.project_number,
+        le.team_leader_name
+      FROM log_entries le
+      JOIN periods p ON p.month_key = TO_CHAR(le.start_date, 'YYYY-MM')
+      ON CONFLICT (period_id, device_id, date) DO NOTHING
+    `);
+
     logger.info("Database migrations completed");
   } finally {
     client.release();

@@ -19,6 +19,7 @@ export * from './markExportedInput';
 export * from './markExportedResult';
 export * from './mileageSummary';
 export * from './odometerRange';
+export * from './passwordCheckResult';
 export * from './passwordVerifyInput';
 export * from './passwordVerifyResult';
 export * from './period';

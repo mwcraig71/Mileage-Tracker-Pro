@@ -248,6 +248,18 @@ export const UpdateAnnotationResponse = zod.object({
 
 
 /**
+ * @summary Check whether a password matches the manager secret (compatibility alias). Pass password as Authorization Bearer token.
+ */
+export const CheckManagerPasswordHeader = zod.object({
+  "Authorization": zod.string().optional().describe('Bearer <password>')
+})
+
+export const CheckManagerPasswordResponse = zod.object({
+  "valid": zod.boolean()
+})
+
+
+/**
  * @summary Verify the manager password and receive a short-lived unlock token
  */
 export const VerifyManagerPasswordBody = zod.object({

@@ -131,6 +131,10 @@ export interface MarkExportedResult {
   updated: number;
 }
 
+export interface PasswordCheckResult {
+  valid: boolean;
+}
+
 export interface PasswordVerifyInput {
   password: string;
   /** The period ID being unlocked. The returned token is scoped to this period only. */
