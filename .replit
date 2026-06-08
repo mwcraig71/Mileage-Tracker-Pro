@@ -26,3 +26,12 @@ externalPort = 80
 [[ports]]
 localPort = 8081
 externalPort = 8081
+
+[[ports]]
+localPort = 26161
+externalPort = 3000
+
+[userenv]
+
+[userenv.shared]
+ONESTEP_GPS_API_KEY = "dv8wTbYc3Fd5vCK9A8LEZsOqkdrMcZ4AWGqd15fyWuA"

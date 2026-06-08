@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Mileage Log"
+version = "1.0.0"
+id = "artifacts/mileage-log"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 26161
+
+[services.development]
+run = "pnpm --filter @workspace/mileage-log run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/mileage-log", "run", "build" ]
+publicDir = "artifacts/mileage-log/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "26161"
+BASE_PATH = "/"
