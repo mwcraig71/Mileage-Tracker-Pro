@@ -23,11 +23,14 @@ import type {
   Annotation,
   AnnotationInput,
   AnnotationUpdate,
+  DriverSession,
+  DriverSessionInput,
   ErrorResponse,
   GetMileageSummaryParams,
   GetOdometerRangeParams,
   GpsDevice,
   HealthStatus,
+  ListDriverSessionsParams,
   MarkExportedInput,
   MarkExportedResult,
   MileageSummary,
@@ -1181,6 +1184,231 @@ export const useUpdateAnnotation = <TError = ErrorType<ErrorResponse>,
         TContext
       > => {
       return useMutation(getUpdateAnnotationMutationOptions(options));
+    }
+
+export const getListDriverSessionsUrl = (params?: ListDriverSessionsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/driver-sessions?${stringifiedParams}` : `/api/driver-sessions`
+}
+
+/**
+ * @summary List driver sessions, optionally filtered by date range and/or device
+ */
+export const listDriverSessions = async (params?: ListDriverSessionsParams, options?: RequestInit): Promise<DriverSession[]> => {
+
+  return customFetch<DriverSession[]>(getListDriverSessionsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListDriverSessionsQueryKey = (params?: ListDriverSessionsParams,) => {
+    return [
+    `/api/driver-sessions`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListDriverSessionsQueryOptions = <TData = Awaited<ReturnType<typeof listDriverSessions>>, TError = ErrorType<unknown>>(params?: ListDriverSessionsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listDriverSessions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListDriverSessionsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listDriverSessions>>> = ({ signal }) => listDriverSessions(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listDriverSessions>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListDriverSessionsQueryResult = NonNullable<Awaited<ReturnType<typeof listDriverSessions>>>
+export type ListDriverSessionsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List driver sessions, optionally filtered by date range and/or device
+ */
+
+export function useListDriverSessions<TData = Awaited<ReturnType<typeof listDriverSessions>>, TError = ErrorType<unknown>>(
+ params?: ListDriverSessionsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listDriverSessions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListDriverSessionsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getStartDriverSessionUrl = () => {
+
+
+
+
+  return `/api/driver-sessions`
+}
+
+/**
+ * @summary Start a new driver shift session
+ */
+export const startDriverSession = async (driverSessionInput: DriverSessionInput, options?: RequestInit): Promise<DriverSession> => {
+
+  return customFetch<DriverSession>(getStartDriverSessionUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      driverSessionInput,)
+  }
+);}
+
+
+
+
+export const getStartDriverSessionMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startDriverSession>>, TError,{data: BodyType<DriverSessionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof startDriverSession>>, TError,{data: BodyType<DriverSessionInput>}, TContext> => {
+
+const mutationKey = ['startDriverSession'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof startDriverSession>>, {data: BodyType<DriverSessionInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  startDriverSession(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type StartDriverSessionMutationResult = NonNullable<Awaited<ReturnType<typeof startDriverSession>>>
+    export type StartDriverSessionMutationBody = BodyType<DriverSessionInput>
+    export type StartDriverSessionMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Start a new driver shift session
+ */
+export const useStartDriverSession = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof startDriverSession>>, TError,{data: BodyType<DriverSessionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof startDriverSession>>,
+        TError,
+        {data: BodyType<DriverSessionInput>},
+        TContext
+      > => {
+      return useMutation(getStartDriverSessionMutationOptions(options));
+    }
+
+export const getEndDriverSessionUrl = (id: number,) => {
+
+
+
+
+  return `/api/driver-sessions/${id}/end`
+}
+
+/**
+ * @summary End an active driver shift session
+ */
+export const endDriverSession = async (id: number, options?: RequestInit): Promise<DriverSession> => {
+
+  return customFetch<DriverSession>(getEndDriverSessionUrl(id),
+  {
+    ...options,
+    method: 'PATCH'
+
+
+  }
+);}
+
+
+
+
+export const getEndDriverSessionMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof endDriverSession>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof endDriverSession>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['endDriverSession'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof endDriverSession>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  endDriverSession(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type EndDriverSessionMutationResult = NonNullable<Awaited<ReturnType<typeof endDriverSession>>>
+
+    export type EndDriverSessionMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary End an active driver shift session
+ */
+export const useEndDriverSession = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof endDriverSession>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof endDriverSession>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getEndDriverSessionMutationOptions(options));
     }
 
 export const getCheckManagerPasswordUrl = () => {

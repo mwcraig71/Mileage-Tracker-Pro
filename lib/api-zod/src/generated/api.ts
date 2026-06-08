@@ -248,6 +248,55 @@ export const UpdateAnnotationResponse = zod.object({
 
 
 /**
+ * @summary List driver sessions, optionally filtered by date range and/or device
+ */
+export const ListDriverSessionsQueryParams = zod.object({
+  "from": zod.coerce.string().optional().describe('Start date (YYYY-MM-DD)'),
+  "to": zod.coerce.string().optional().describe('End date (YYYY-MM-DD)'),
+  "device_id": zod.coerce.string().optional()
+})
+
+export const ListDriverSessionsResponseItem = zod.object({
+  "id": zod.number(),
+  "driver_name": zod.string(),
+  "device_id": zod.string(),
+  "project_number": zod.string(),
+  "started_at": zod.string(),
+  "ended_at": zod.string().nullish(),
+  "created_at": zod.string()
+})
+export const ListDriverSessionsResponse = zod.array(ListDriverSessionsResponseItem)
+
+
+/**
+ * @summary Start a new driver shift session
+ */
+export const StartDriverSessionBody = zod.object({
+  "driver_name": zod.string(),
+  "device_id": zod.string(),
+  "project_number": zod.string().optional()
+})
+
+
+/**
+ * @summary End an active driver shift session
+ */
+export const EndDriverSessionParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const EndDriverSessionResponse = zod.object({
+  "id": zod.number(),
+  "driver_name": zod.string(),
+  "device_id": zod.string(),
+  "project_number": zod.string(),
+  "started_at": zod.string(),
+  "ended_at": zod.string().nullish(),
+  "created_at": zod.string()
+})
+
+
+/**
  * @summary Check whether a password matches the manager secret (compatibility alias). Pass password as Authorization Bearer token.
  */
 export const CheckManagerPasswordHeader = zod.object({

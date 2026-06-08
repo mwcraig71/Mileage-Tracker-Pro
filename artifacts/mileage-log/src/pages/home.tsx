@@ -3,12 +3,13 @@ import { format, startOfMonth, endOfMonth, subMonths } from "date-fns";
 import {
   Truck, Filter, Printer, Download, Loader2, ChevronDown, Check, ChevronsUpDown,
   Plus, Save, CheckCircle2, Lock, Unlock, ChevronUp, ArrowUpDown, Archive,
-  Clock, AlertTriangle, X,
+  Clock, AlertTriangle, X, User,
 } from "lucide-react";
 import { useQuery, useQueries, useQueryClient } from "@tanstack/react-query";
 import {
   getGetMileageSummaryQueryOptions,
   getListPeriodAnnotationsQueryOptions,
+  getListDriverSessionsQueryOptions,
   useGetGpsDevices,
   useListProjects,
   useListTeamLeaders,
@@ -192,6 +193,10 @@ export default function Home() {
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
+  // ── Driver-session auto-fill state ──────────────────────────────────────────
+  const [sessionPrefilled, setSessionPrefilled] = useState<Set<string>>(new Set());
+  const [sessionMultiple, setSessionMultiple]   = useState<Set<string>>(new Set());
+
   // ── UI state ────────────────────────────────────────────────────────────────
   const [isSaving, setIsSaving]               = useState(false);
   const [saveSuccess, setSaveSuccess]         = useState(false);
@@ -230,6 +235,12 @@ export default function Home() {
   const { data: archiveAnnotations, isFetching: archiveFetching } = useQuery({
     ...getListPeriodAnnotationsQueryOptions(archivePeriodId ?? 0),
     enabled: archivePeriodId !== null,
+  });
+
+  // ── Driver sessions for auto-fill ───────────────────────────────────────────
+  const { data: driverSessions = [] } = useQuery({
+    ...getListDriverSessionsQueryOptions({ from: dateFrom, to: dateTo }),
+    enabled: submitted && !!dateFrom && !!dateTo,
   });
 
   // ── Period info ─────────────────────────────────────────────────────────────
@@ -335,6 +346,45 @@ export default function Home() {
   const getArchiveAnnotation = useCallback((key: string): RowAnnotation =>
     archiveEdits[key] ?? EMPTY_ANN, [archiveEdits]);
 
+  // ── Auto-fill from driver sessions ──────────────────────────────────────────
+  useEffect(() => {
+    if (!submitted || allRows.length === 0 || driverSessions.length === 0) return;
+
+    const prefilled = new Set<string>();
+    const multiple  = new Set<string>();
+    const toFill: Record<string, { leader: string; project: string }> = {};
+
+    for (const row of allRows) {
+      if (savedAnnotationMap[row.key]) continue;
+      const matches = driverSessions.filter(
+        s => s.device_id === row.deviceId && s.started_at.slice(0, 10) === row.date,
+      );
+      if (!matches.length) continue;
+      if (matches.length > 1) multiple.add(row.key);
+      prefilled.add(row.key);
+      toFill[row.key] = {
+        leader:  matches[0].driver_name,
+        project: matches[0].project_number ?? "",
+      };
+    }
+
+    if (!prefilled.size) return;
+
+    setSessionPrefilled(prefilled);
+    setSessionMultiple(multiple);
+    setAnnotations(prev => {
+      const next = { ...prev };
+      for (const [key, fill] of Object.entries(toFill)) {
+        const cur = prev[key] ?? EMPTY_ANN;
+        if (!cur.leader && !cur.project) {
+          next[key] = { ...EMPTY_ANN, ...cur, leader: fill.leader, project: fill.project };
+        }
+      }
+      return next;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allRows, driverSessions, submitted]);
+
   // ── Sorted display rows ─────────────────────────────────────────────────────
   const displayedRows = useMemo(
     () => applySort(allRows, sortKey, sortDir, getAnnotation),
@@ -399,6 +449,8 @@ export default function Home() {
         loadedPeriodRef.current = null;
         setAnnotations({});
         setSavedAnnotationMap({});
+        setSessionPrefilled(new Set());
+        setSessionMultiple(new Set());
       }
       setViewMode("current");
       setSubmitted(false);
@@ -628,7 +680,7 @@ export default function Home() {
   const tableHead = (
     <thead>
       <tr className="border-b border-white/10 bg-white/5">
-        <th className="w-7 px-2" />
+        <th className="w-10 px-2" />
         <SortableTh col="date"     label="Date"                    cls="w-[110px]" />
         <SortableTh col="vehicle"  label="Vehicle"                 cls="w-[110px]" />
         <StaticTh   label="Begin Odo"                              cls="w-[100px] text-right" />
@@ -662,15 +714,26 @@ export default function Home() {
         className={cn("border-b border-white/5 hover:bg-white/[0.03] transition-colors",
           i % 2 !== 0 && "bg-white/[0.015]")}>
         {/* Status */}
-        <td className="px-2 py-1.5 w-7">
-          {savedInfo && (
-            <span aria-label={savedInfo.is_exported ? "Saved & exported" : "Saved"}>
-              <CheckCircle2
-                className={cn("h-3.5 w-3.5",
-                  savedInfo.is_exported ? "text-white/20" : "text-emerald-400/70")}
-              />
-            </span>
-          )}
+        <td className="px-2 py-1.5 w-10">
+          <div className="flex items-center gap-0.5">
+            {savedInfo ? (
+              <span aria-label={savedInfo.is_exported ? "Saved & exported" : "Saved"}>
+                <CheckCircle2
+                  className={cn("h-3.5 w-3.5",
+                    savedInfo.is_exported ? "text-white/20" : "text-emerald-400/70")}
+                />
+              </span>
+            ) : sessionPrefilled.has(row.key) ? (
+              <span title="Pre-filled from driver session">
+                <User className="h-3.5 w-3.5 text-sky-400/70" />
+              </span>
+            ) : null}
+            {sessionMultiple.has(row.key) && (
+              <span title="Multiple driver sessions this day">
+                <AlertTriangle className="h-3 w-3 text-amber-400/70" />
+              </span>
+            )}
+          </div>
         </td>
         {/* DATE */}
         <td className="px-3 py-1.5 font-mono text-xs text-white/70 whitespace-nowrap">{row.date}</td>

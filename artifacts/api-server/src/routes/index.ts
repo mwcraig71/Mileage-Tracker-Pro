@@ -7,6 +7,7 @@ import logEntriesRouter from "./logEntries";
 import periodsRouter from "./periods";
 import annotationsRouter from "./annotations";
 import configRouter from "./config";
+import driverSessionsRouter from "./driverSessions";
 
 const router: IRouter = Router();
 
@@ -18,5 +19,6 @@ router.use("/log-entries", logEntriesRouter);
 router.use("/periods", periodsRouter);
 router.use("/annotations", annotationsRouter);
 router.use("/config", configRouter);
+router.use("/driver-sessions", driverSessionsRouter);
 
 export default router;

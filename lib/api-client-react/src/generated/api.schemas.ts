@@ -147,6 +147,22 @@ export interface PasswordVerifyResult {
   token?: string | null;
 }
 
+export interface DriverSession {
+  id: number;
+  driver_name: string;
+  device_id: string;
+  project_number: string;
+  started_at: string;
+  ended_at?: string | null;
+  created_at: string;
+}
+
+export interface DriverSessionInput {
+  driver_name: string;
+  device_id: string;
+  project_number?: string;
+}
+
 export type GetMileageSummaryParams = {
 device_id: string;
 from: string;
@@ -157,5 +173,17 @@ export type GetOdometerRangeParams = {
 device_id: string;
 from: string;
 to: string;
+};
+
+export type ListDriverSessionsParams = {
+/**
+ * Start date (YYYY-MM-DD)
+ */
+from?: string;
+/**
+ * End date (YYYY-MM-DD)
+ */
+to?: string;
+device_id?: string;
 };
 

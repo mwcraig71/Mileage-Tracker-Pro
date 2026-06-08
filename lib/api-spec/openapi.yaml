@@ -14,6 +14,7 @@ tags:
   - name: periods
   - name: annotations
   - name: config
+  - name: driverSessions
 paths:
   /healthz:
     get:
@@ -313,6 +314,81 @@ paths:
                 $ref: "#/components/schemas/Annotation"
         "403":
           description: Period is finalized and no valid manager token provided
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /driver-sessions:
+    get:
+      operationId: listDriverSessions
+      tags: [driverSessions]
+      summary: List driver sessions, optionally filtered by date range and/or device
+      parameters:
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+          description: "Start date (YYYY-MM-DD)"
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+          description: "End date (YYYY-MM-DD)"
+        - name: device_id
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of driver sessions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DriverSession"
+    post:
+      operationId: startDriverSession
+      tags: [driverSessions]
+      summary: Start a new driver shift session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DriverSessionInput"
+      responses:
+        "201":
+          description: Created session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DriverSession"
+
+  /driver-sessions/{id}/end:
+    patch:
+      operationId: endDriverSession
+      tags: [driverSessions]
+      summary: End an active driver shift session
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Ended session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DriverSession"
+        "404":
+          description: Session not found or already ended
           content:
             application/json:
               schema:
@@ -631,3 +707,34 @@ components:
           type: string
           nullable: true
           description: Short-lived HMAC-signed token authorizing writes to the specified period. Null when password is incorrect.
+
+    DriverSession:
+      type: object
+      required: [id, driver_name, device_id, project_number, started_at, created_at]
+      properties:
+        id:
+          type: integer
+        driver_name:
+          type: string
+        device_id:
+          type: string
+        project_number:
+          type: string
+        started_at:
+          type: string
+        ended_at:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+
+    DriverSessionInput:
+      type: object
+      required: [driver_name, device_id]
+      properties:
+        driver_name:
+          type: string
+        device_id:
+          type: string
+        project_number:
+          type: string

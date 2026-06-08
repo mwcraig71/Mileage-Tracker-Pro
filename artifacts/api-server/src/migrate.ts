@@ -120,6 +120,24 @@ export async function runMigrations(): Promise<void> {
       ON CONFLICT (period_id, device_id, date) DO NOTHING
     `);
 
+    // ── Task #6 table ─────────────────────────────────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS driver_sessions (
+        id             SERIAL PRIMARY KEY,
+        driver_name    TEXT NOT NULL,
+        device_id      TEXT NOT NULL,
+        project_number TEXT NOT NULL DEFAULT '',
+        started_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        ended_at       TIMESTAMPTZ,
+        created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS driver_sessions_device_started
+        ON driver_sessions (device_id, started_at)
+    `);
+
     logger.info("Database migrations completed");
   } finally {
     client.release();
