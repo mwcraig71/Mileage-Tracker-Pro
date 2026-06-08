@@ -19,4 +19,6 @@ export interface AnnotationInput {
   direct_miles?: number;
   project_number?: string;
   team_leader_name?: string;
+  /** Required when the target period is finalized. Obtained from /config/verify-password. */
+  manager_token?: string | null;
 }

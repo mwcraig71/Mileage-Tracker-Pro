@@ -23,6 +23,7 @@ import type {
   Annotation,
   AnnotationInput,
   AnnotationUpdate,
+  ErrorResponse,
   GetMileageSummaryParams,
   GetOdometerRangeParams,
   GpsDevice,
@@ -1064,7 +1065,7 @@ export const upsertAnnotation = async (annotationInput: AnnotationInput, options
 
 
 
-export const getUpsertAnnotationMutationOptions = <TError = ErrorType<unknown>,
+export const getUpsertAnnotationMutationOptions = <TError = ErrorType<ErrorResponse>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof upsertAnnotation>>, TError,{data: BodyType<AnnotationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof upsertAnnotation>>, TError,{data: BodyType<AnnotationInput>}, TContext> => {
 
@@ -1093,12 +1094,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type UpsertAnnotationMutationResult = NonNullable<Awaited<ReturnType<typeof upsertAnnotation>>>
     export type UpsertAnnotationMutationBody = BodyType<AnnotationInput>
-    export type UpsertAnnotationMutationError = ErrorType<unknown>
+    export type UpsertAnnotationMutationError = ErrorType<ErrorResponse>
 
     /**
  * @summary Create or update a row annotation
  */
-export const useUpsertAnnotation = <TError = ErrorType<unknown>,
+export const useUpsertAnnotation = <TError = ErrorType<ErrorResponse>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof upsertAnnotation>>, TError,{data: BodyType<AnnotationInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof upsertAnnotation>>,
@@ -1118,7 +1119,7 @@ export const getUpdateAnnotationUrl = (id: number,) => {
 }
 
 /**
- * @summary Update an annotation (for editing finalized periods)
+ * @summary Update an annotation
  */
 export const updateAnnotation = async (id: number,
     annotationUpdate: AnnotationUpdate, options?: RequestInit): Promise<Annotation> => {
@@ -1136,7 +1137,7 @@ export const updateAnnotation = async (id: number,
 
 
 
-export const getUpdateAnnotationMutationOptions = <TError = ErrorType<unknown>,
+export const getUpdateAnnotationMutationOptions = <TError = ErrorType<ErrorResponse>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAnnotation>>, TError,{id: number;data: BodyType<AnnotationUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof updateAnnotation>>, TError,{id: number;data: BodyType<AnnotationUpdate>}, TContext> => {
 
@@ -1165,12 +1166,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type UpdateAnnotationMutationResult = NonNullable<Awaited<ReturnType<typeof updateAnnotation>>>
     export type UpdateAnnotationMutationBody = BodyType<AnnotationUpdate>
-    export type UpdateAnnotationMutationError = ErrorType<unknown>
+    export type UpdateAnnotationMutationError = ErrorType<ErrorResponse>
 
     /**
- * @summary Update an annotation (for editing finalized periods)
+ * @summary Update an annotation
  */
-export const useUpdateAnnotation = <TError = ErrorType<unknown>,
+export const useUpdateAnnotation = <TError = ErrorType<ErrorResponse>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAnnotation>>, TError,{id: number;data: BodyType<AnnotationUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof updateAnnotation>>,
@@ -1190,7 +1191,7 @@ export const getVerifyManagerPasswordUrl = () => {
 }
 
 /**
- * @summary Verify the manager password
+ * @summary Verify the manager password and receive a short-lived unlock token
  */
 export const verifyManagerPassword = async (passwordVerifyInput: PasswordVerifyInput, options?: RequestInit): Promise<PasswordVerifyResult> => {
 
@@ -1239,7 +1240,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type VerifyManagerPasswordMutationError = ErrorType<unknown>
 
     /**
- * @summary Verify the manager password
+ * @summary Verify the manager password and receive a short-lived unlock token
  */
 export const useVerifyManagerPassword = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof verifyManagerPassword>>, TError,{data: BodyType<PasswordVerifyInput>}, TContext>, request?: SecondParameter<typeof customFetch>}

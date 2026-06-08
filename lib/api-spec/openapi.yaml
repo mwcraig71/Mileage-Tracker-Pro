@@ -280,12 +280,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Annotation"
+        "403":
+          description: Period is finalized and no valid manager token provided
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /annotations/{id}:
     put:
       operationId: updateAnnotation
       tags: [annotations]
-      summary: Update an annotation (for editing finalized periods)
+      summary: Update an annotation
       parameters:
         - name: id
           in: path
@@ -305,12 +311,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Annotation"
+        "403":
+          description: Period is finalized and no valid manager token provided
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /config/verify-password:
     post:
       operationId: verifyManagerPassword
       tags: [config]
-      summary: Verify the manager password
+      summary: Verify the manager password and receive a short-lived unlock token
       requestBody:
         required: true
         content:
@@ -319,7 +331,7 @@ paths:
               $ref: "#/components/schemas/PasswordVerifyInput"
       responses:
         "200":
-          description: Verification result
+          description: Verification result (token is null when password is wrong)
           content:
             application/json:
               schema:
@@ -332,6 +344,13 @@ components:
       required: [status]
       properties:
         status:
+          type: string
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
           type: string
 
     GpsDevice:
@@ -526,6 +545,10 @@ components:
           type: string
         team_leader_name:
           type: string
+        manager_token:
+          type: string
+          nullable: true
+          description: Required when the target period is finalized. Obtained from /config/verify-password.
 
     AnnotationUpdate:
       type: object
@@ -540,6 +563,10 @@ components:
           type: string
         team_leader_name:
           type: string
+        manager_token:
+          type: string
+          nullable: true
+          description: Required when the annotation belongs to a finalized period. Obtained from /config/verify-password.
 
     MarkExportedInput:
       type: object
@@ -559,10 +586,13 @@ components:
 
     PasswordVerifyInput:
       type: object
-      required: [password]
+      required: [password, period_id]
       properties:
         password:
           type: string
+        period_id:
+          type: integer
+          description: The period ID being unlocked. The returned token is scoped to this period only.
 
     PasswordVerifyResult:
       type: object
@@ -570,3 +600,7 @@ components:
       properties:
         valid:
           type: boolean
+        token:
+          type: string
+          nullable: true
+          description: Short-lived HMAC-signed token authorizing writes to the specified period. Null when password is incorrect.

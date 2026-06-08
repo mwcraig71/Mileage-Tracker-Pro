@@ -8,4 +8,6 @@
 
 export interface PasswordVerifyResult {
   valid: boolean;
+  /** Short-lived HMAC-signed token authorizing writes to the specified period. Null when password is incorrect. */
+  token?: string | null;
 }

@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { Pool } from "pg";
+import { verifyManagerToken } from "../managerToken";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const router = Router();
@@ -26,18 +27,38 @@ function fmtAnnotation(r: Record<string, unknown>) {
 }
 
 // Upsert annotation (by period_id + device_id + date)
+// Rejects writes to finalized periods unless a valid manager_token is provided.
 router.post("/", async (req, res) => {
   const {
     period_id, device_id, device_name = "", date,
     begin_odometer, end_odometer, gps_miles,
     indirect_miles = 0, personal_miles = 0, direct_miles = 0,
     project_number = "", team_leader_name = "",
+    manager_token,
   } = req.body as {
     period_id: number; device_id: string; device_name?: string; date: string;
     begin_odometer?: number; end_odometer?: number; gps_miles?: number;
     indirect_miles?: number; personal_miles?: number; direct_miles?: number;
     project_number?: string; team_leader_name?: string;
+    manager_token?: string;
   };
+
+  const periodResult = await pool.query(
+    "SELECT finalized FROM periods WHERE id = $1",
+    [period_id]
+  );
+  if (periodResult.rows.length === 0) {
+    res.status(404).json({ error: "Period not found" });
+    return;
+  }
+  if (periodResult.rows[0].finalized === true) {
+    if (!verifyManagerToken(manager_token, Number(period_id))) {
+      res.status(403).json({
+        error: "This period is finalized. A valid manager unlock token is required to make changes.",
+      });
+      return;
+    }
+  }
 
   const result = await pool.query(
     `INSERT INTO log_annotations
@@ -63,15 +84,42 @@ router.post("/", async (req, res) => {
   res.status(201).json(fmtAnnotation(result.rows[0]));
 });
 
-// Update a single annotation (used when editing finalized period)
+// Update a single annotation.
+// Rejects writes to finalized periods unless a valid manager_token is provided.
 router.put("/:id", async (req, res) => {
   const {
     indirect_miles, personal_miles, direct_miles,
     project_number, team_leader_name,
+    manager_token,
   } = req.body as {
     indirect_miles?: number; personal_miles?: number; direct_miles?: number;
     project_number?: string; team_leader_name?: string;
+    manager_token?: string;
   };
+
+  // Resolve this annotation's period to check finalized status
+  const annResult = await pool.query(
+    "SELECT period_id FROM log_annotations WHERE id = $1",
+    [req.params.id]
+  );
+  if (annResult.rows.length === 0) {
+    res.status(404).json({ error: "Annotation not found" });
+    return;
+  }
+  const periodId = Number(annResult.rows[0].period_id);
+
+  const periodResult = await pool.query(
+    "SELECT finalized FROM periods WHERE id = $1",
+    [periodId]
+  );
+  if (periodResult.rows[0]?.finalized === true) {
+    if (!verifyManagerToken(manager_token, periodId)) {
+      res.status(403).json({
+        error: "This period is finalized. A valid manager unlock token is required to make changes.",
+      });
+      return;
+    }
+  }
 
   const result = await pool.query(
     `UPDATE log_annotations SET
@@ -82,13 +130,10 @@ router.put("/:id", async (req, res) => {
        team_leader_name = COALESCE($6, team_leader_name),
        updated_at = NOW()
      WHERE id = $1 RETURNING *`,
-    [req.params.id, indirect_miles ?? null, personal_miles ?? null, direct_miles ?? null,
+    [req.params.id,
+     indirect_miles ?? null, personal_miles ?? null, direct_miles ?? null,
      project_number ?? null, team_leader_name ?? null]
   );
-  if (result.rows.length === 0) {
-    res.status(404).json({ error: "Annotation not found" });
-    return;
-  }
   res.json(fmtAnnotation(result.rows[0]));
 });
 

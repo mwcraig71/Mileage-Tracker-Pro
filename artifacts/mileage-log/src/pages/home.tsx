@@ -197,7 +197,7 @@ export default function Home() {
   const [saveSuccess, setSaveSuccess]         = useState(false);
   const [showFinalizeConfirm, setShowFinalizeConfirm] = useState(false);
   const [showPasswordModal, setShowPasswordModal]     = useState(false);
-  const [isUnlocked, setIsUnlocked]           = useState(false);
+  const [unlockToken, setUnlockToken]         = useState<string | null>(null);
   const [passwordInput, setPasswordInput]     = useState("");
   const [passwordError, setPasswordError]     = useState("");
   const [exportNewOnly, setExportNewOnly]     = useState(true);
@@ -278,7 +278,7 @@ export default function Home() {
       };
     }
     setArchiveEdits(edits);
-    setIsUnlocked(false);
+    setUnlockToken(null);
   }, [archiveAnnotations, archivePeriodId]);
 
   // ── GPS data ────────────────────────────────────────────────────────────────
@@ -461,6 +461,7 @@ export default function Home() {
             direct_miles:     direct,
             project_number:   ann.project,
             team_leader_name: ann.leader,
+            manager_token:    unlockToken ?? undefined,
           },
         });
       }
@@ -535,9 +536,11 @@ export default function Home() {
 
   const handleVerifyPassword = async () => {
     setPasswordError("");
-    const result = await verifyPasswordM.mutateAsync({ data: { password: passwordInput } });
-    if (result.valid) {
-      setIsUnlocked(true);
+    const result = await verifyPasswordM.mutateAsync({
+      data: { password: passwordInput, period_id: archivePeriodId! },
+    });
+    if (result.valid && result.token) {
+      setUnlockToken(result.token);
       setShowPasswordModal(false);
       setPasswordInput("");
     } else {
@@ -550,7 +553,7 @@ export default function Home() {
       setArchivePeriodId(id);
       loadedArchiveRef.current = null;
       setArchiveEdits({});
-      setIsUnlocked(false);
+      setUnlockToken(null);
     }
     setViewMode("archive");
     setPeriodSelectorOpen(false);
@@ -829,12 +832,12 @@ export default function Home() {
             {/* Unlock (archive only) */}
             {viewMode === "archive" && isFinalized && (
               <Button variant="ghost" size="sm"
-                onClick={() => isUnlocked ? setIsUnlocked(false) : setShowPasswordModal(true)}
+                onClick={() => unlockToken ? setUnlockToken(null) : setShowPasswordModal(true)}
                 className={cn("h-8 text-xs gap-1.5",
-                  isUnlocked
+                  unlockToken
                     ? "text-amber-400 hover:text-amber-300 hover:bg-amber-500/10"
                     : "text-white/50 hover:text-white hover:bg-white/10")}>
-                {isUnlocked ? <><Unlock className="h-3.5 w-3.5" />Unlocked</> : <><Lock className="h-3.5 w-3.5" />Unlock</>}
+                {unlockToken ? <><Unlock className="h-3.5 w-3.5" />Unlocked</> : <><Lock className="h-3.5 w-3.5" />Unlock</>}
               </Button>
             )}
 
@@ -894,7 +897,7 @@ export default function Home() {
                   <CheckCircle2 className="h-3.5 w-3.5" />Saved
                 </span>
               )}
-              {isUnlocked && (
+              {unlockToken && (
                 <Button onClick={handleSaveArchive} disabled={isSaving}
                   className="h-8 text-xs bg-amber-500 hover:bg-amber-400 text-black font-semibold gap-1.5">
                   {isSaving
@@ -904,7 +907,7 @@ export default function Home() {
               )}
             </div>
 
-            {isUnlocked && (
+            {unlockToken && (
               <div className="mb-4 flex items-center gap-2 text-xs text-amber-400/80 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
                 <Unlock className="h-3.5 w-3.5 shrink-0" />
                 Editing unlocked — changes here do not affect GPS odometer readings.
@@ -927,7 +930,7 @@ export default function Home() {
                       </td></tr>
                     ) : archiveDisplayRows.map((row, i) =>
                         renderRow(row, i, getArchiveAnnotation(row.key), setArchiveAnnotation,
-                          { id: row.annotationId, is_exported: row.isExported }, !isUnlocked)
+                          { id: row.annotationId, is_exported: row.isExported }, !unlockToken)
                       )
                     }
                   </tbody>

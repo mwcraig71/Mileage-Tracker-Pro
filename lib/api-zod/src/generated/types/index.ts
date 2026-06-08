@@ -10,6 +10,7 @@ export * from './annotation';
 export * from './annotationInput';
 export * from './annotationUpdate';
 export * from './dailyMileage';
+export * from './errorResponse';
 export * from './getMileageSummaryParams';
 export * from './getOdometerRangeParams';
 export * from './gpsDevice';

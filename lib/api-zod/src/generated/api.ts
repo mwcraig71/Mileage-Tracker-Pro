@@ -206,12 +206,13 @@ export const UpsertAnnotationBody = zod.object({
   "personal_miles": zod.number().optional(),
   "direct_miles": zod.number().optional(),
   "project_number": zod.string().optional(),
-  "team_leader_name": zod.string().optional()
+  "team_leader_name": zod.string().optional(),
+  "manager_token": zod.string().nullish().describe('Required when the target period is finalized. Obtained from \/config\/verify-password.')
 })
 
 
 /**
- * @summary Update an annotation (for editing finalized periods)
+ * @summary Update an annotation
  */
 export const UpdateAnnotationParams = zod.object({
   "id": zod.coerce.number()
@@ -222,7 +223,8 @@ export const UpdateAnnotationBody = zod.object({
   "personal_miles": zod.number().optional(),
   "direct_miles": zod.number().optional(),
   "project_number": zod.string().optional(),
-  "team_leader_name": zod.string().optional()
+  "team_leader_name": zod.string().optional(),
+  "manager_token": zod.string().nullish().describe('Required when the annotation belongs to a finalized period. Obtained from \/config\/verify-password.')
 })
 
 export const UpdateAnnotationResponse = zod.object({
@@ -246,14 +248,16 @@ export const UpdateAnnotationResponse = zod.object({
 
 
 /**
- * @summary Verify the manager password
+ * @summary Verify the manager password and receive a short-lived unlock token
  */
 export const VerifyManagerPasswordBody = zod.object({
-  "password": zod.string()
+  "password": zod.string(),
+  "period_id": zod.number().describe('The period ID being unlocked. The returned token is scoped to this period only.')
 })
 
 export const VerifyManagerPasswordResponse = zod.object({
-  "valid": zod.boolean()
+  "valid": zod.boolean(),
+  "token": zod.string().nullish().describe('Short-lived HMAC-signed token authorizing writes to the specified period. Null when password is incorrect.')
 })
 
 

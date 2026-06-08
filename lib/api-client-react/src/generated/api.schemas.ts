@@ -9,6 +9,10 @@ export interface HealthStatus {
   status: string;
 }
 
+export interface ErrorResponse {
+  error: string;
+}
+
 export interface GpsDevice {
   device_id: string;
   display_name: string;
@@ -105,6 +109,8 @@ export interface AnnotationInput {
   direct_miles?: number;
   project_number?: string;
   team_leader_name?: string;
+  /** Required when the target period is finalized. Obtained from /config/verify-password. */
+  manager_token?: string | null;
 }
 
 export interface AnnotationUpdate {
@@ -113,6 +119,8 @@ export interface AnnotationUpdate {
   direct_miles?: number;
   project_number?: string;
   team_leader_name?: string;
+  /** Required when the annotation belongs to a finalized period. Obtained from /config/verify-password. */
+  manager_token?: string | null;
 }
 
 export interface MarkExportedInput {
@@ -125,10 +133,14 @@ export interface MarkExportedResult {
 
 export interface PasswordVerifyInput {
   password: string;
+  /** The period ID being unlocked. The returned token is scoped to this period only. */
+  period_id: number;
 }
 
 export interface PasswordVerifyResult {
   valid: boolean;
+  /** Short-lived HMAC-signed token authorizing writes to the specified period. Null when password is incorrect. */
+  token?: string | null;
 }
 
 export type GetMileageSummaryParams = {
