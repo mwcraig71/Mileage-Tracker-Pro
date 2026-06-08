@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   FlatList,
   ActivityIndicator,
   Platform,
+  TextInput,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
@@ -19,6 +20,8 @@ import {
   useListTeamLeaders,
   useListDriverSessions,
   useStartDriverSession,
+  useCreateTeamLeader,
+  useCreateProject,
 } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
 
@@ -57,17 +60,21 @@ export default function ShiftScreen() {
 
   const dateOptions = useMemo(() => recentDates(30), []);
 
-  const [selectedDate, setSelectedDate]       = useState<string>(todayStr);
-  const [selectedDriver, setSelectedDriver]   = useState<string>("");
+  const [selectedDate, setSelectedDate]         = useState<string>(todayStr);
+  const [selectedDriver, setSelectedDriver]     = useState<string>("");
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
-  const [selectedProject, setSelectedProject] = useState<string>("");
-  const [modalType, setModalType]             = useState<ModalType>(null);
-  const [errorMsg, setErrorMsg]               = useState<string>("");
-  const [successMsg, setSuccessMsg]           = useState<string>("");
+  const [selectedProject, setSelectedProject]   = useState<string>("");
+  const [modalType, setModalType]               = useState<ModalType>(null);
+  const [searchText, setSearchText]             = useState<string>("");
+  const [errorMsg, setErrorMsg]                 = useState<string>("");
+  const [successMsg, setSuccessMsg]             = useState<string>("");
+  const [savingNew, setSavingNew]               = useState(false);
+
+  const searchRef = useRef<TextInput>(null);
 
   const { data: devices = [],     isLoading: devicesLoading  } = useGetGpsDevices();
-  const { data: projects = [],    isLoading: projectsLoading } = useListProjects();
-  const { data: teamLeaders = [], isLoading: leadersLoading  } = useListTeamLeaders();
+  const { data: projects = [],    isLoading: projectsLoading, refetch: refetchProjects } = useListProjects();
+  const { data: teamLeaders = [], isLoading: leadersLoading,  refetch: refetchLeaders  } = useListTeamLeaders();
 
   const { data: dateSessions = [], refetch: refetchSessions } = useListDriverSessions({
     from: selectedDate,
@@ -79,23 +86,25 @@ export default function ShiftScreen() {
     return () => clearInterval(t);
   }, [refetchSessions]);
 
-  const logMut = useStartDriverSession();
+  const logMut           = useStartDriverSession();
+  const createDriverMut  = useCreateTeamLeader();
+  const createProjectMut = useCreateProject();
 
-  const selectedDevice    = devices.find((d) => d.device_id === selectedDeviceId);
-  const isLoading         = devicesLoading || projectsLoading || leadersLoading;
-  const isReady           = !!selectedDriver && !!selectedDeviceId;
-
-  const selectedDateOpt   = dateOptions.find((o) => o.value === selectedDate) ?? dateOptions[0];
+  const selectedDevice  = devices.find((d) => d.device_id === selectedDeviceId);
+  const isLoading       = devicesLoading || projectsLoading || leadersLoading;
+  const isReady         = !!selectedDriver && !!selectedDeviceId;
+  const selectedDateOpt = dateOptions.find((o) => o.value === selectedDate) ?? dateOptions[0];
+  const isPast          = selectedDate !== todayStr();
 
   const alreadyLogged = useMemo(
-    () =>
-      dateSessions.some(
-        (s) => s.driver_name === selectedDriver && s.device_id === selectedDeviceId,
-      ),
+    () => dateSessions.some(
+      (s) => s.driver_name === selectedDriver && s.device_id === selectedDeviceId,
+    ),
     [dateSessions, selectedDriver, selectedDeviceId],
   );
 
-  const pickerData = useMemo<string[]>(() => {
+  // Full picker list for the open modal
+  const allPickerItems = useMemo<string[]>(() => {
     if (modalType === "date")    return dateOptions.map((o) => o.label);
     if (modalType === "driver")  return teamLeaders.map((t) => t.name);
     if (modalType === "truck")   return devices.map((d) => d.display_name);
@@ -103,20 +112,60 @@ export default function ShiftScreen() {
     return [];
   }, [modalType, dateOptions, teamLeaders, devices, projects]);
 
-  const handlePickerSelect = (value: string) => {
-    if (modalType === "date") {
-      const opt = dateOptions.find((o) => o.label === value);
-      if (opt) setSelectedDate(opt.value);
-    } else if (modalType === "driver") {
-      setSelectedDriver(value);
-    } else if (modalType === "truck") {
-      const dev = devices.find((d) => d.display_name === value);
-      setSelectedDeviceId(dev?.device_id ?? "");
-    } else if (modalType === "project") {
-      setSelectedProject(value);
+  // Filtered by search text
+  const filteredItems = useMemo<string[]>(() => {
+    if (!searchText.trim()) return allPickerItems;
+    const q = searchText.trim().toLowerCase();
+    return allPickerItems.filter((item) => item.toLowerCase().includes(q));
+  }, [allPickerItems, searchText]);
+
+  // Show "Add" row when typed text doesn't match any existing item exactly
+  const canAddNew = useMemo(() => {
+    if (modalType !== "driver" && modalType !== "project") return false;
+    const q = searchText.trim();
+    if (!q) return false;
+    return !allPickerItems.some((item) => item.toLowerCase() === q.toLowerCase());
+  }, [modalType, allPickerItems, searchText]);
+
+  const openModal = (type: ModalType) => {
+    setSearchText("");
+    setModalType(type);
+    setTimeout(() => searchRef.current?.focus(), 300);
+  };
+
+  const handlePickerSelect = async (value: string, isNew = false) => {
+    if (isNew) {
+      setSavingNew(true);
+      try {
+        if (modalType === "driver") {
+          await createDriverMut.mutateAsync({ data: { name: value } });
+          await refetchLeaders();
+          setSelectedDriver(value);
+        } else if (modalType === "project") {
+          await createProjectMut.mutateAsync({ data: { project_number: value } });
+          await refetchProjects();
+          setSelectedProject(value);
+        }
+      } catch {
+        setErrorMsg("Failed to save. Try again.");
+      } finally {
+        setSavingNew(false);
+      }
+    } else {
+      if (modalType === "date") {
+        const opt = dateOptions.find((o) => o.label === value);
+        if (opt) setSelectedDate(opt.value);
+      } else if (modalType === "driver") {
+        setSelectedDriver(value);
+      } else if (modalType === "truck") {
+        const dev = devices.find((d) => d.display_name === value);
+        setSelectedDeviceId(dev?.device_id ?? "");
+      } else if (modalType === "project") {
+        setSelectedProject(value);
+      }
     }
     setModalType(null);
-    setErrorMsg("");
+    setSearchText("");
     setSuccessMsg("");
   };
 
@@ -146,8 +195,8 @@ export default function ShiftScreen() {
     }
   };
 
+  const showSearch = modalType === "driver" || modalType === "project";
   const s = makeStyles(colors, insets);
-  const isPast = selectedDate !== todayStr();
 
   return (
     <View style={s.root}>
@@ -165,10 +214,10 @@ export default function ShiftScreen() {
           <Text style={s.headerTitle}>Truck Log</Text>
         </View>
 
-        {/* Date card — prominent, full-width tap target */}
+        {/* Date card */}
         <TouchableOpacity
           style={[s.dateCard, isPast && s.dateCardPast]}
-          onPress={() => setModalType("date")}
+          onPress={() => openModal("date")}
           activeOpacity={0.75}
           testID="select-date"
         >
@@ -194,9 +243,10 @@ export default function ShiftScreen() {
             <ActivityIndicator color={colors.primary} style={{ marginVertical: 24 }} />
           ) : (
             <>
+              {/* Driver */}
               <TouchableOpacity
                 style={[s.selectorCard, !!selectedDriver && s.selectorCardActive]}
-                onPress={() => setModalType("driver")}
+                onPress={() => openModal("driver")}
                 activeOpacity={0.75}
                 testID="select-driver"
               >
@@ -206,15 +256,16 @@ export default function ShiftScreen() {
                 <View style={s.selectorText}>
                   <Text style={s.selectorHint}>Driver</Text>
                   <Text style={[s.selectorVal, !selectedDriver && s.selectorValEmpty]}>
-                    {selectedDriver || "Select driver…"}
+                    {selectedDriver || "Select or add driver…"}
                   </Text>
                 </View>
                 <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
               </TouchableOpacity>
 
+              {/* Truck */}
               <TouchableOpacity
                 style={[s.selectorCard, !!selectedDeviceId && s.selectorCardActive]}
-                onPress={() => setModalType("truck")}
+                onPress={() => openModal("truck")}
                 activeOpacity={0.75}
                 testID="select-truck"
               >
@@ -230,9 +281,10 @@ export default function ShiftScreen() {
                 <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
               </TouchableOpacity>
 
+              {/* Project */}
               <TouchableOpacity
                 style={[s.selectorCard, !!selectedProject && s.selectorCardActive]}
-                onPress={() => setModalType("project")}
+                onPress={() => openModal("project")}
                 activeOpacity={0.75}
                 testID="select-project"
               >
@@ -242,7 +294,7 @@ export default function ShiftScreen() {
                 <View style={s.selectorText}>
                   <Text style={s.selectorHint}>Project</Text>
                   <Text style={[s.selectorVal, !selectedProject && s.selectorValEmpty]}>
-                    {selectedProject || "Optional"}
+                    {selectedProject || "Select or add project…"}
                   </Text>
                 </View>
                 <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
@@ -323,50 +375,100 @@ export default function ShiftScreen() {
         animationType="slide"
         transparent
         presentationStyle="pageSheet"
-        onRequestClose={() => setModalType(null)}
+        onRequestClose={() => { setModalType(null); setSearchText(""); }}
       >
         <View style={s.modalBg}>
           <View style={s.modalSheet}>
             <View style={s.modalHandle} />
             <View style={s.modalHead}>
               <Text style={s.modalTitle}>
-                {modalType === "date"
-                  ? "Select Date"
-                  : modalType === "driver"
-                    ? "Select Driver"
-                    : modalType === "truck"
-                      ? "Select Truck"
-                      : "Select Project"}
+                {modalType === "date"    ? "Select Date"
+                 : modalType === "driver"  ? "Select Driver"
+                 : modalType === "truck"   ? "Select Truck"
+                 : "Select Project"}
               </Text>
-              <TouchableOpacity onPress={() => setModalType(null)} style={s.modalCloseBtn}>
+              <TouchableOpacity
+                onPress={() => { setModalType(null); setSearchText(""); }}
+                style={s.modalCloseBtn}
+              >
                 <Feather name="x" size={20} color={colors.mutedForeground} />
               </TouchableOpacity>
             </View>
-            <FlatList
-              data={pickerData}
-              keyExtractor={(item, i) => `${item}_${i}`}
-              renderItem={({ item }) => {
-                let selected = false;
-                if (modalType === "date")    selected = item === selectedDateOpt.label;
-                if (modalType === "driver")  selected = item === selectedDriver;
-                if (modalType === "truck")   selected = item === (selectedDevice?.display_name ?? "");
-                if (modalType === "project") selected = item === selectedProject;
-                return (
-                  <TouchableOpacity
-                    style={[s.pickerRow, selected && s.pickerRowSelected]}
-                    onPress={() => handlePickerSelect(item)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[s.pickerText, selected && s.pickerTextSelected]}>
-                      {item || "(None)"}
-                    </Text>
-                    {selected && <Feather name="check" size={16} color={colors.primary} />}
+
+            {/* Search / type input for driver & project */}
+            {showSearch && (
+              <View style={s.searchRow}>
+                <Feather name="search" size={16} color={colors.mutedForeground} style={s.searchIcon} />
+                <TextInput
+                  ref={searchRef}
+                  style={s.searchInput}
+                  placeholder={modalType === "driver" ? "Search or type a new name…" : "Search or type a new project…"}
+                  placeholderTextColor={colors.mutedForeground}
+                  value={searchText}
+                  onChangeText={setSearchText}
+                  autoCapitalize="characters"
+                  autoCorrect={false}
+                  returnKeyType="done"
+                />
+                {searchText.length > 0 && (
+                  <TouchableOpacity onPress={() => setSearchText("")}>
+                    <Feather name="x-circle" size={16} color={colors.mutedForeground} />
                   </TouchableOpacity>
-                );
-              }}
-              contentContainerStyle={{ padding: 12, paddingBottom: insets.bottom + 24 }}
-              showsVerticalScrollIndicator={false}
-            />
+                )}
+              </View>
+            )}
+
+            {savingNew ? (
+              <View style={{ padding: 40, alignItems: "center" }}>
+                <ActivityIndicator color={colors.primary} />
+                <Text style={[s.pickerText, { marginTop: 12, color: colors.mutedForeground }]}>
+                  Saving…
+                </Text>
+              </View>
+            ) : (
+              <FlatList
+                data={filteredItems}
+                keyExtractor={(item, i) => `${item}_${i}`}
+                ListHeaderComponent={
+                  canAddNew ? (
+                    <TouchableOpacity
+                      style={s.addRow}
+                      onPress={() => handlePickerSelect(searchText.trim(), true)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={s.addRowIcon}>
+                        <Feather name="plus" size={16} color={colors.primary} />
+                      </View>
+                      <Text style={s.addRowText}>
+                        Add <Text style={s.addRowName}>"{searchText.trim()}"</Text>
+                      </Text>
+                    </TouchableOpacity>
+                  ) : null
+                }
+                renderItem={({ item }) => {
+                  let selected = false;
+                  if (modalType === "date")    selected = item === selectedDateOpt.label;
+                  if (modalType === "driver")  selected = item === selectedDriver;
+                  if (modalType === "truck")   selected = item === (selectedDevice?.display_name ?? "");
+                  if (modalType === "project") selected = item === selectedProject;
+                  return (
+                    <TouchableOpacity
+                      style={[s.pickerRow, selected && s.pickerRowSelected]}
+                      onPress={() => handlePickerSelect(item)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[s.pickerText, selected && s.pickerTextSelected]}>
+                        {item || "(None)"}
+                      </Text>
+                      {selected && <Feather name="check" size={16} color={colors.primary} />}
+                    </TouchableOpacity>
+                  );
+                }}
+                contentContainerStyle={{ padding: 12, paddingBottom: insets.bottom + 24 }}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+              />
+            )}
           </View>
         </View>
       </Modal>
@@ -387,229 +489,140 @@ function makeStyles(c: Colors, insets: Insets) {
       paddingHorizontal: 20,
     },
 
-    header: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 12,
-      marginBottom: 20,
-    },
+    header: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 20 },
     headerIcon: {
-      width: 40,
-      height: 40,
-      borderRadius: 12,
-      backgroundColor: c.card,
-      alignItems: "center",
-      justifyContent: "center",
+      width: 40, height: 40, borderRadius: 12,
+      backgroundColor: c.card, alignItems: "center", justifyContent: "center",
     },
-    headerTitle: {
-      fontSize: 24,
-      fontFamily: "Inter_700Bold",
-      color: c.foreground,
-      letterSpacing: -0.5,
-    },
+    headerTitle: { fontSize: 24, fontFamily: "Inter_700Bold", color: c.foreground, letterSpacing: -0.5 },
 
     dateCard: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      backgroundColor: c.card,
-      borderRadius: 18,
-      paddingVertical: 20,
-      paddingHorizontal: 20,
-      marginBottom: 20,
-      borderWidth: 1.5,
-      borderColor: c.primary + "50",
+      flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+      backgroundColor: c.card, borderRadius: 18,
+      paddingVertical: 20, paddingHorizontal: 20, marginBottom: 20,
+      borderWidth: 1.5, borderColor: c.primary + "50",
     },
     dateCardPast: { borderColor: "#F59E0B50", backgroundColor: "#F59E0B08" },
     dateCardLeft: { flexDirection: "row", alignItems: "center", gap: 14 },
-    dateCardLabel: {
-      fontSize: 18,
-      fontFamily: "Inter_700Bold",
-      color: c.foreground,
-      letterSpacing: -0.3,
-    },
+    dateCardLabel: { fontSize: 18, fontFamily: "Inter_700Bold", color: c.foreground, letterSpacing: -0.3 },
     dateCardLabelPast: { color: "#F59E0B" },
-    dateCardSub: {
-      fontSize: 11,
-      fontFamily: "Inter_400Regular",
-      color: "#F59E0B",
-      marginTop: 2,
-      opacity: 0.8,
-    },
+    dateCardSub: { fontSize: 11, fontFamily: "Inter_400Regular", color: "#F59E0B", marginTop: 2, opacity: 0.8 },
 
     section: { marginBottom: 16 },
     sectionLabel: {
-      fontSize: 10,
-      fontFamily: "Inter_600SemiBold",
-      color: c.mutedForeground,
-      letterSpacing: 1.5,
-      marginBottom: 10,
+      fontSize: 10, fontFamily: "Inter_600SemiBold",
+      color: c.mutedForeground, letterSpacing: 1.5, marginBottom: 10,
     },
 
     selectorCard: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 14,
-      backgroundColor: c.card,
-      borderRadius: 14,
-      padding: 16,
-      marginBottom: 10,
-      borderWidth: 1,
-      borderColor: c.border,
+      flexDirection: "row", alignItems: "center", gap: 14,
+      backgroundColor: c.card, borderRadius: 14,
+      padding: 16, marginBottom: 10, borderWidth: 1, borderColor: c.border,
     },
     selectorCardActive: { borderColor: c.primary + "40" },
     selectorIconBox: {
-      width: 40,
-      height: 40,
-      borderRadius: 10,
-      backgroundColor: c.secondary,
-      alignItems: "center",
-      justifyContent: "center",
+      width: 40, height: 40, borderRadius: 10,
+      backgroundColor: c.secondary, alignItems: "center", justifyContent: "center",
     },
     selectorIconBoxActive: { backgroundColor: c.primary + "20" },
     selectorText: { flex: 1 },
-    selectorHint: {
-      fontSize: 10,
-      fontFamily: "Inter_500Medium",
-      color: c.mutedForeground,
-      marginBottom: 2,
-    },
+    selectorHint: { fontSize: 10, fontFamily: "Inter_500Medium", color: c.mutedForeground, marginBottom: 2 },
     selectorVal: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: c.foreground },
     selectorValEmpty: { color: c.mutedForeground, fontFamily: "Inter_400Regular" },
 
     warnBanner: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 8,
-      backgroundColor: "#F59E0B15",
-      borderRadius: 12,
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      marginBottom: 12,
-      borderWidth: 1,
-      borderColor: "#F59E0B40",
+      flexDirection: "row", alignItems: "center", gap: 8,
+      backgroundColor: "#F59E0B15", borderRadius: 12,
+      paddingHorizontal: 16, paddingVertical: 12, marginBottom: 12,
+      borderWidth: 1, borderColor: "#F59E0B40",
     },
     warnText: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#F59E0B", flex: 1 },
 
     errorBanner: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 8,
-      backgroundColor: "#EF444420",
-      borderRadius: 12,
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      marginBottom: 16,
-      borderWidth: 1,
-      borderColor: "#EF444440",
+      flexDirection: "row", alignItems: "center", gap: 8,
+      backgroundColor: "#EF444420", borderRadius: 12,
+      paddingHorizontal: 16, paddingVertical: 12, marginBottom: 16,
+      borderWidth: 1, borderColor: "#EF444440",
     },
     errorText: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#EF4444", flex: 1 },
     successBanner: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 8,
-      backgroundColor: "#10B98120",
-      borderRadius: 12,
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      marginBottom: 16,
-      borderWidth: 1,
-      borderColor: "#10B98140",
+      flexDirection: "row", alignItems: "center", gap: 8,
+      backgroundColor: "#10B98120", borderRadius: 12,
+      paddingHorizontal: 16, paddingVertical: 12, marginBottom: 16,
+      borderWidth: 1, borderColor: "#10B98140",
     },
     successText: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#10B981", flex: 1 },
 
     submitBtn: {
-      backgroundColor: c.primary,
-      borderRadius: 18,
-      height: 60,
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 10,
-      marginBottom: 24,
+      backgroundColor: c.primary, borderRadius: 18, height: 60,
+      flexDirection: "row", alignItems: "center", justifyContent: "center",
+      gap: 10, marginBottom: 24,
     },
     submitBtnDisabled: { backgroundColor: c.secondary, borderWidth: 1, borderColor: c.border },
-    submitBtnText: {
-      fontSize: 17,
-      fontFamily: "Inter_700Bold",
-      color: "#0F1923",
-      letterSpacing: -0.3,
-    },
+    submitBtnText: { fontSize: 17, fontFamily: "Inter_700Bold", color: "#0F1923", letterSpacing: -0.3 },
     submitBtnTextDisabled: { color: c.mutedForeground },
 
     entryRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 12,
-      backgroundColor: c.card,
-      borderRadius: 12,
-      padding: 14,
-      marginBottom: 8,
-      borderWidth: 1,
-      borderColor: c.border,
+      flexDirection: "row", alignItems: "center", gap: 12,
+      backgroundColor: c.card, borderRadius: 12,
+      padding: 14, marginBottom: 8, borderWidth: 1, borderColor: c.border,
     },
-    entryDot: {
-      width: 8,
-      height: 8,
-      borderRadius: 4,
-      backgroundColor: "#10B981",
-    },
+    entryDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#10B981" },
     entryInfo: { flex: 1 },
     entryDriver: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: c.foreground },
     entryMeta: { fontSize: 12, fontFamily: "Inter_400Regular", color: c.mutedForeground, marginTop: 2 },
 
-    modalBg: {
-      flex: 1,
-      justifyContent: "flex-end",
-      backgroundColor: "rgba(0,0,0,0.5)",
-    },
+    modalBg: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.5)" },
     modalSheet: {
-      backgroundColor: c.background,
-      borderTopLeftRadius: 24,
-      borderTopRightRadius: 24,
-      maxHeight: "75%",
-      borderWidth: 1,
-      borderColor: c.border,
-      borderBottomWidth: 0,
+      backgroundColor: c.background, borderTopLeftRadius: 24, borderTopRightRadius: 24,
+      maxHeight: "80%", borderWidth: 1, borderColor: c.border, borderBottomWidth: 0,
     },
     modalHandle: {
-      width: 36,
-      height: 4,
-      borderRadius: 2,
-      backgroundColor: c.border,
-      alignSelf: "center",
-      marginTop: 12,
-      marginBottom: 4,
+      width: 36, height: 4, borderRadius: 2, backgroundColor: c.border,
+      alignSelf: "center", marginTop: 12, marginBottom: 4,
     },
     modalHead: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      paddingHorizontal: 20,
-      paddingVertical: 16,
-      borderBottomWidth: 1,
-      borderColor: c.border,
+      flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+      paddingHorizontal: 20, paddingVertical: 16,
+      borderBottomWidth: 1, borderColor: c.border,
     },
     modalTitle: { fontSize: 18, fontFamily: "Inter_700Bold", color: c.foreground },
     modalCloseBtn: {
-      width: 32,
-      height: 32,
-      borderRadius: 16,
-      backgroundColor: c.secondary,
-      alignItems: "center",
-      justifyContent: "center",
+      width: 32, height: 32, borderRadius: 16,
+      backgroundColor: c.secondary, alignItems: "center", justifyContent: "center",
     },
+
+    searchRow: {
+      flexDirection: "row", alignItems: "center", gap: 10,
+      backgroundColor: c.secondary, margin: 12, borderRadius: 12,
+      paddingHorizontal: 14, paddingVertical: 10,
+      borderWidth: 1, borderColor: c.border,
+    },
+    searchIcon: { opacity: 0.6 },
+    searchInput: {
+      flex: 1, fontSize: 15, fontFamily: "Inter_400Regular",
+      color: c.foreground,
+    },
+
+    addRow: {
+      flexDirection: "row", alignItems: "center", gap: 12,
+      backgroundColor: c.primary + "12", borderRadius: 12,
+      paddingVertical: 14, paddingHorizontal: 12, marginBottom: 6,
+      borderWidth: 1, borderColor: c.primary + "30",
+    },
+    addRowIcon: {
+      width: 28, height: 28, borderRadius: 8,
+      backgroundColor: c.primary + "20", alignItems: "center", justifyContent: "center",
+    },
+    addRowText: { fontSize: 15, fontFamily: "Inter_400Regular", color: c.foreground },
+    addRowName: { fontFamily: "Inter_700Bold", color: c.primary },
+
     pickerRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      paddingVertical: 16,
-      paddingHorizontal: 12,
-      borderRadius: 12,
-      marginBottom: 4,
+      flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+      paddingVertical: 14, paddingHorizontal: 12, borderRadius: 12, marginBottom: 2,
     },
     pickerRowSelected: { backgroundColor: c.primary + "15" },
-    pickerText: { fontSize: 16, fontFamily: "Inter_400Regular", color: c.foreground },
+    pickerText: { fontSize: 15, fontFamily: "Inter_400Regular", color: c.foreground },
     pickerTextSelected: { fontFamily: "Inter_600SemiBold", color: c.primary },
   });
 }
