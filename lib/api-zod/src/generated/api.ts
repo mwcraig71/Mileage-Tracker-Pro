@@ -143,6 +143,7 @@ export const ListPeriodAnnotationsResponseItem = zod.object({
   "device_id": zod.string(),
   "device_name": zod.string(),
   "date": zod.string(),
+  "split_index": zod.number(),
   "begin_odometer": zod.number().nullish(),
   "end_odometer": zod.number().nullish(),
   "gps_miles": zod.number().nullish(),
@@ -199,6 +200,7 @@ export const UpsertAnnotationBody = zod.object({
   "device_id": zod.string(),
   "device_name": zod.string().optional(),
   "date": zod.string(),
+  "split_index": zod.number().optional(),
   "begin_odometer": zod.number().nullish(),
   "end_odometer": zod.number().nullish(),
   "gps_miles": zod.number().nullish(),
@@ -208,6 +210,14 @@ export const UpsertAnnotationBody = zod.object({
   "project_number": zod.string().optional(),
   "team_leader_name": zod.string().optional(),
   "manager_token": zod.string().nullish().describe('Required when the target period is finalized. Obtained from \/config\/verify-password.')
+})
+
+
+/**
+ * @summary Delete a single annotation record (e.g. to remove a saved split row)
+ */
+export const DeleteAnnotationParams = zod.object({
+  "id": zod.coerce.number()
 })
 
 
@@ -233,6 +243,7 @@ export const UpdateAnnotationResponse = zod.object({
   "device_id": zod.string(),
   "device_name": zod.string(),
   "date": zod.string(),
+  "split_index": zod.number(),
   "begin_odometer": zod.number().nullish(),
   "end_odometer": zod.number().nullish(),
   "gps_miles": zod.number().nullish(),

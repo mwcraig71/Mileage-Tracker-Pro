@@ -66,6 +66,7 @@ export async function runMigrations(): Promise<void> {
         device_id        TEXT NOT NULL,
         device_name      TEXT NOT NULL DEFAULT '',
         date             DATE NOT NULL,
+        split_index      INTEGER NOT NULL DEFAULT 0,
         begin_odometer   NUMERIC,
         end_odometer     NUMERIC,
         gps_miles        NUMERIC,
@@ -77,8 +78,32 @@ export async function runMigrations(): Promise<void> {
         is_exported      BOOLEAN NOT NULL DEFAULT FALSE,
         created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        UNIQUE (period_id, device_id, date)
+        UNIQUE (period_id, device_id, date, split_index)
       )
+    `);
+
+    // ── Migrate split_index column + constraint on existing tables ─────────────
+    // Idempotent: ADD COLUMN IF NOT EXISTS handles fresh vs existing installs.
+    // Drops the old 3-column unique constraint (period_id, device_id, date) and
+    // replaces it with a 4-column one that includes split_index.
+    await client.query(`
+      ALTER TABLE log_annotations ADD COLUMN IF NOT EXISTS split_index INTEGER NOT NULL DEFAULT 0
+    `);
+    await client.query(`
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM pg_constraint
+          WHERE conname = 'log_annotations_period_id_device_id_date_key'
+            AND conrelid = 'log_annotations'::regclass
+        ) THEN
+          ALTER TABLE log_annotations
+            DROP CONSTRAINT log_annotations_period_id_device_id_date_key;
+          ALTER TABLE log_annotations
+            ADD CONSTRAINT log_annotations_period_id_device_id_date_split_index_key
+            UNIQUE (period_id, device_id, date, split_index);
+        END IF;
+      END $$
     `);
 
     // ── Backfill: migrate log_entries → periods + log_annotations ────────────
@@ -98,7 +123,7 @@ export async function runMigrations(): Promise<void> {
 
     await client.query(`
       INSERT INTO log_annotations
-        (period_id, device_id, device_name, date,
+        (period_id, device_id, device_name, date, split_index,
          begin_odometer, end_odometer, gps_miles,
          indirect_miles, personal_miles, direct_miles,
          project_number, team_leader_name)
@@ -107,6 +132,7 @@ export async function runMigrations(): Promise<void> {
         le.device_id,
         le.device_name,
         le.start_date,
+        0,
         le.begin_odometer,
         le.end_odometer,
         NULL,
@@ -117,7 +143,7 @@ export async function runMigrations(): Promise<void> {
         le.team_leader_name
       FROM log_entries le
       JOIN periods p ON p.month_key = TO_CHAR(le.start_date, 'YYYY-MM')
-      ON CONFLICT (period_id, device_id, date) DO NOTHING
+      ON CONFLICT (period_id, device_id, date, split_index) DO NOTHING
     `);
 
     // ── Task #6 table ─────────────────────────────────────────────────────────

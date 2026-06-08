@@ -289,6 +289,26 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
 
   /annotations/{id}:
+    delete:
+      operationId: deleteAnnotation
+      tags: [annotations]
+      summary: Delete a single annotation record (e.g. to remove a saved split row)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted successfully
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
     put:
       operationId: updateAnnotation
       tags: [annotations]
@@ -572,7 +592,7 @@ components:
 
     Annotation:
       type: object
-      required: [id, period_id, device_id, device_name, date, indirect_miles, personal_miles, direct_miles, project_number, team_leader_name, is_exported]
+      required: [id, period_id, device_id, device_name, date, split_index, indirect_miles, personal_miles, direct_miles, project_number, team_leader_name, is_exported]
       properties:
         id:
           type: integer
@@ -584,6 +604,8 @@ components:
           type: string
         date:
           type: string
+        split_index:
+          type: integer
         begin_odometer:
           type: number
           nullable: true
@@ -622,6 +644,8 @@ components:
           type: string
         date:
           type: string
+        split_index:
+          type: integer
         begin_odometer:
           type: number
           nullable: true

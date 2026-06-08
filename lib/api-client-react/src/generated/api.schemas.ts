@@ -83,6 +83,7 @@ export interface Annotation {
   device_id: string;
   device_name: string;
   date: string;
+  split_index: number;
   begin_odometer?: number | null;
   end_odometer?: number | null;
   gps_miles?: number | null;
@@ -101,6 +102,7 @@ export interface AnnotationInput {
   device_id: string;
   device_name?: string;
   date: string;
+  split_index?: number;
   begin_odometer?: number | null;
   end_odometer?: number | null;
   gps_miles?: number | null;

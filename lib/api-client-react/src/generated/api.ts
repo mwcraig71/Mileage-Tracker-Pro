@@ -1114,6 +1114,76 @@ export const useUpsertAnnotation = <TError = ErrorType<ErrorResponse>,
       return useMutation(getUpsertAnnotationMutationOptions(options));
     }
 
+export const getDeleteAnnotationUrl = (id: number,) => {
+
+
+
+
+  return `/api/annotations/${id}`
+}
+
+/**
+ * @summary Delete a single annotation record (e.g. to remove a saved split row)
+ */
+export const deleteAnnotation = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteAnnotationUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteAnnotationMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteAnnotation>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteAnnotation>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteAnnotation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteAnnotation>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteAnnotation(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteAnnotationMutationResult = NonNullable<Awaited<ReturnType<typeof deleteAnnotation>>>
+
+    export type DeleteAnnotationMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Delete a single annotation record (e.g. to remove a saved split row)
+ */
+export const useDeleteAnnotation = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteAnnotation>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteAnnotation>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteAnnotationMutationOptions(options));
+    }
+
 export const getUpdateAnnotationUrl = (id: number,) => {
 
 

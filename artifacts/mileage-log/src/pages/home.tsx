@@ -1,9 +1,9 @@
-import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef, Fragment } from "react";
 import { format, startOfMonth, endOfMonth, subMonths } from "date-fns";
 import {
   Truck, Filter, Printer, Download, Loader2, ChevronDown, Check, ChevronsUpDown,
   Plus, Save, CheckCircle2, Lock, Unlock, ChevronUp, ArrowUpDown, Archive,
-  Clock, AlertTriangle, X, User,
+  Clock, AlertTriangle, X, User, Scissors,
 } from "lucide-react";
 import { useQuery, useQueries, useQueryClient } from "@tanstack/react-query";
 import {
@@ -22,6 +22,7 @@ import {
   useUpsertAnnotation,
   useUpdateAnnotation,
   useVerifyManagerPassword,
+  useDeleteAnnotation,
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,11 +39,12 @@ const DEFAULT_FROM = format(startOfMonth(subMonths(now, 1)), "yyyy-MM-dd");
 const DEFAULT_TO   = format(endOfMonth(subMonths(now, 1)), "yyyy-MM-dd");
 
 interface RowAnnotation {
-  indirect: string;
-  personal: string;
-  direct:   string;
-  project:  string;
-  leader:   string;
+  allocated: string;
+  indirect:  string;
+  personal:  string;
+  direct:    string;
+  project:   string;
+  leader:    string;
 }
 
 type SortKey = "date" | "vehicle" | "indirect" | "project" | "leader";
@@ -62,7 +64,7 @@ interface ArchiveRow extends GpsRow {
   isExported:   boolean;
 }
 
-const EMPTY_ANN: RowAnnotation = { indirect: "", personal: "", direct: "", project: "", leader: "" };
+const EMPTY_ANN: RowAnnotation = { allocated: "", indirect: "", personal: "", direct: "", project: "", leader: "" };
 
 function applySort<T extends { date: string; deviceName: string; key: string }>(
   rows: T[],
@@ -180,7 +182,8 @@ export default function Home() {
 
   // ── Annotation state (current GPS view) ────────────────────────────────────
   const [annotations, setAnnotations]           = useState<Record<string, RowAnnotation>>({});
-  const [savedAnnotationMap, setSavedAnnotationMap] = useState<Record<string, { id: number; is_exported: boolean }>>({});
+  const [extraSplits, setExtraSplits]           = useState<Record<string, RowAnnotation[]>>({});
+  const [savedAnnotationMap, setSavedAnnotationMap] = useState<Record<string, { id: number; is_exported: boolean; splitIds?: number[] }>>({});
 
   // ── Period & archive state ──────────────────────────────────────────────────
   const [activePeriodId, setActivePeriodId]   = useState<number | null>(null);
@@ -229,6 +232,7 @@ export default function Home() {
   const markExportedMut    = useMarkAnnotationsExported();
   const upsertAnnotationM  = useUpsertAnnotation();
   const updateAnnotationM  = useUpdateAnnotation();
+  const deleteAnnotationM  = useDeleteAnnotation();
   const verifyPasswordM    = useVerifyManagerPassword();
 
   const { data: periodAnnotations } = useQuery({
@@ -257,21 +261,51 @@ export default function Home() {
     if (loadedPeriodRef.current === activePeriodId) return;
     loadedPeriodRef.current = activePeriodId;
 
-    const newSaved: Record<string, { id: number; is_exported: boolean }> = {};
-    const newAnnotations: Record<string, RowAnnotation> = {};
+    // Group by row key, sort each group by split_index
+    const byKey: Record<string, typeof periodAnnotations[number][]> = {};
     for (const ann of periodAnnotations) {
       const key = `${ann.device_id}_${ann.date}`;
-      newSaved[key] = { id: ann.id, is_exported: ann.is_exported };
-      newAnnotations[key] = {
-        indirect: ann.indirect_miles !== 0 ? String(ann.indirect_miles) : "",
-        personal: ann.personal_miles !== 0 ? String(ann.personal_miles) : "",
-        direct:   String(ann.direct_miles),
-        project:  ann.project_number,
-        leader:   ann.team_leader_name,
-      };
+      if (!byKey[key]) byKey[key] = [];
+      byKey[key].push(ann);
     }
+
+    const newSaved: Record<string, { id: number; is_exported: boolean; splitIds?: number[] }> = {};
+    const newAnnotations: Record<string, RowAnnotation> = {};
+    const newExtraSplits: Record<string, RowAnnotation[]> = {};
+
+    for (const [key, anns] of Object.entries(byKey)) {
+      const sorted = [...anns].sort((a, b) => a.split_index - b.split_index);
+      const primary  = sorted[0];
+      const isSplit  = sorted.length > 1;
+
+      newSaved[key] = {
+        id: primary.id,
+        is_exported: primary.is_exported,
+        splitIds: sorted.slice(1).map(a => a.id),
+      };
+      newAnnotations[key] = {
+        allocated: isSplit ? String(primary.indirect_miles + primary.personal_miles + primary.direct_miles) : "",
+        indirect:  primary.indirect_miles !== 0 ? String(primary.indirect_miles) : "",
+        personal:  primary.personal_miles !== 0 ? String(primary.personal_miles) : "",
+        direct:    String(primary.direct_miles),
+        project:   primary.project_number,
+        leader:    primary.team_leader_name,
+      };
+      if (isSplit) {
+        newExtraSplits[key] = sorted.slice(1).map(a => ({
+          allocated: String(a.indirect_miles + a.personal_miles + a.direct_miles),
+          indirect:  a.indirect_miles !== 0 ? String(a.indirect_miles) : "",
+          personal:  a.personal_miles !== 0 ? String(a.personal_miles) : "",
+          direct:    String(a.direct_miles),
+          project:   a.project_number,
+          leader:    a.team_leader_name,
+        }));
+      }
+    }
+
     setSavedAnnotationMap(newSaved);
     setAnnotations(newAnnotations);
+    setExtraSplits(newExtraSplits);
   }, [periodAnnotations, activePeriodId]);
 
   // ── Effect: load archive period annotations (once per switch) ───────────────
@@ -284,11 +318,12 @@ export default function Home() {
     for (const ann of archiveAnnotations) {
       const key = `${ann.device_id}_${ann.date}`;
       edits[key] = {
-        indirect: ann.indirect_miles > 0 ? String(ann.indirect_miles) : "",
-        personal: ann.personal_miles > 0 ? String(ann.personal_miles) : "",
-        direct:   String(ann.direct_miles),
-        project:  ann.project_number,
-        leader:   ann.team_leader_name,
+        allocated: "",
+        indirect:  ann.indirect_miles > 0 ? String(ann.indirect_miles) : "",
+        personal:  ann.personal_miles > 0 ? String(ann.personal_miles) : "",
+        direct:    String(ann.direct_miles),
+        project:   ann.project_number,
+        leader:    ann.team_leader_name,
       };
     }
     setArchiveEdits(edits);
@@ -465,9 +500,87 @@ export default function Home() {
     qc.invalidateQueries({ queryKey: ["/api/team-leaders"] });
   };
 
-  const setAnnotation = useCallback((key: string, field: keyof RowAnnotation, value: string) => {
-    setAnnotations(prev => ({ ...prev, [key]: { ...EMPTY_ANN, ...prev[key], [field]: value } }));
+  const setAnnotation = useCallback((key: string, field: keyof RowAnnotation, value: string, gpsMiles = 0) => {
+    setAnnotations(prev => {
+      const cur = { ...EMPTY_ANN, ...prev[key], [field]: value };
+      if (gpsMiles > 0) {
+        const alloc = cur.allocated !== "" ? (parseFloat(cur.allocated) || 0) : gpsMiles;
+        if (field === "project" && value === "General") {
+          cur.indirect = String(alloc);
+          cur.personal = "";
+          cur.direct   = "0";
+        } else if (field === "indirect" || field === "personal") {
+          const ind = parseFloat(field === "indirect" ? value : cur.indirect) || 0;
+          const per = parseFloat(field === "personal" ? value : cur.personal) || 0;
+          cur.direct = Math.max(0, alloc - ind - per).toFixed(1);
+        } else if (field === "allocated") {
+          const newAlloc = parseFloat(value) || 0;
+          const ind = parseFloat(cur.indirect) || 0;
+          const per = parseFloat(cur.personal) || 0;
+          cur.direct = Math.max(0, newAlloc - ind - per).toFixed(1);
+        }
+      }
+      return { ...prev, [key]: cur };
+    });
   }, []);
+
+  const setExtraSplit = useCallback((key: string, si: number, field: keyof RowAnnotation, value: string, gpsMiles = 0) => {
+    setExtraSplits(prev => {
+      const splits = [...(prev[key] ?? [])];
+      if (si >= splits.length) return prev;
+      const cur = { ...EMPTY_ANN, ...splits[si], [field]: value };
+      if (gpsMiles > 0) {
+        const alloc = parseFloat(cur.allocated) || 0;
+        if (field === "project" && value === "General") {
+          cur.indirect = String(alloc);
+          cur.personal = "";
+          cur.direct   = "0";
+        } else if (field === "indirect" || field === "personal") {
+          const ind = parseFloat(field === "indirect" ? value : cur.indirect) || 0;
+          const per = parseFloat(field === "personal" ? value : cur.personal) || 0;
+          cur.direct = Math.max(0, alloc - ind - per).toFixed(1);
+        } else if (field === "allocated") {
+          const newAlloc = parseFloat(value) || 0;
+          const ind = parseFloat(cur.indirect) || 0;
+          const per = parseFloat(cur.personal) || 0;
+          cur.direct = Math.max(0, newAlloc - ind - per).toFixed(1);
+        }
+      }
+      splits[si] = cur;
+      return { ...prev, [key]: splits };
+    });
+  }, []);
+
+  const handleSplitRow = useCallback((key: string, gpsMiles: number) => {
+    const half = (gpsMiles / 2).toFixed(1);
+    setAnnotations(prev => ({
+      ...prev,
+      [key]: { ...EMPTY_ANN, ...prev[key], allocated: half },
+    }));
+    setExtraSplits(prev => ({
+      ...prev,
+      [key]: [...(prev[key] ?? []), { ...EMPTY_ANN, allocated: half }],
+    }));
+  }, []);
+
+  const handleRemoveExtraSplit = useCallback((key: string, si: number, savedId?: number) => {
+    if (savedId !== undefined) {
+      deleteAnnotationM.mutate({ id: savedId });
+    }
+    setExtraSplits(prev => {
+      const splits = (prev[key] ?? []).filter((_, idx) => idx !== si);
+      if (splits.length === 0) {
+        setAnnotations(prev2 => ({
+          ...prev2,
+          [key]: { ...EMPTY_ANN, ...prev2[key], allocated: "" },
+        }));
+        const rest = { ...prev };
+        delete rest[key];
+        return rest;
+      }
+      return { ...prev, [key]: splits };
+    });
+  }, [deleteAnnotationM]);
 
   const setArchiveAnnotation = useCallback((key: string, field: keyof RowAnnotation, value: string) => {
     setArchiveEdits(prev => ({ ...prev, [key]: { ...EMPTY_ANN, ...prev[key], [field]: value } }));
@@ -486,6 +599,7 @@ export default function Home() {
         setSavedAnnotationMap({});
         setSessionPrefilled(new Set());
         setSessionMultiple(new Set());
+        setExtraSplits({});
       }
       setViewMode("current");
       setSubmitted(false);
@@ -503,25 +617,45 @@ export default function Home() {
     try {
       const newSaved = { ...savedAnnotationMap };
       for (const row of displayedRows) {
-        const ann    = getAnnotation(row.key);
-        const direct = ann.direct !== "" ? parseFloat(ann.direct) : row.gpsMiles;
-        const result = await upsertAnnotationM.mutateAsync({
-          data: {
-            period_id:        activePeriodId,
-            device_id:        row.deviceId,
-            device_name:      row.deviceName,
-            date:             row.date,
-            begin_odometer:   row.beginOdo,
-            end_odometer:     row.endOdo,
-            gps_miles:        row.gpsMiles,
-            indirect_miles:   parseFloat(ann.indirect) || 0,
-            personal_miles:   parseFloat(ann.personal) || 0,
-            direct_miles:     direct,
-            project_number:   ann.project,
-            team_leader_name: ann.leader,
-          },
-        });
-        newSaved[row.key] = { id: result.id, is_exported: result.is_exported };
+        const primaryAnn = getAnnotation(row.key);
+        const extras     = extraSplits[row.key] ?? [];
+        const allSplits  = [primaryAnn, ...extras];
+        const savedExtraIds: number[] = [];
+
+        for (let si = 0; si < allSplits.length; si++) {
+          const ann    = allSplits[si];
+          const isFirst = si === 0;
+          const alloc   = ann.allocated !== "" ? (parseFloat(ann.allocated) || 0) : (isFirst ? row.gpsMiles : 0);
+          const indirect = parseFloat(ann.indirect) || 0;
+          const personal = parseFloat(ann.personal) || 0;
+          const direct   = ann.direct !== "" ? parseFloat(ann.direct) : Math.max(0, alloc - indirect - personal);
+
+          const result = await upsertAnnotationM.mutateAsync({
+            data: {
+              period_id:        activePeriodId,
+              device_id:        row.deviceId,
+              device_name:      row.deviceName,
+              date:             row.date,
+              split_index:      si,
+              begin_odometer:   isFirst ? row.beginOdo : undefined,
+              end_odometer:     isFirst ? row.endOdo   : undefined,
+              gps_miles:        isFirst ? row.gpsMiles : undefined,
+              indirect_miles:   indirect,
+              personal_miles:   personal,
+              direct_miles:     direct,
+              project_number:   ann.project,
+              team_leader_name: ann.leader,
+            },
+          });
+          if (isFirst) {
+            newSaved[row.key] = { id: result.id, is_exported: result.is_exported };
+          } else {
+            savedExtraIds.push(result.id);
+          }
+        }
+        if (savedExtraIds.length > 0) {
+          newSaved[row.key] = { ...newSaved[row.key], splitIds: savedExtraIds };
+        }
       }
       setSavedAnnotationMap(newSaved);
       setSaveSuccess(true);
@@ -649,9 +783,22 @@ export default function Home() {
   // ── Computed stats ──────────────────────────────────────────────────────────
   const savedCount = displayedRows.filter(r => savedAnnotationMap[r.key]).length;
   const grandTotal = displayedRows.reduce((sum, r) => {
-    const ann = getAnnotation(r.key);
-    return sum + (parseFloat(ann.indirect) || 0) + (parseFloat(ann.personal) || 0) +
-           (ann.direct !== "" ? parseFloat(ann.direct) : r.gpsMiles);
+    const ann    = getAnnotation(r.key);
+    const extras = extraSplits[r.key] ?? [];
+    const ind    = parseFloat(ann.indirect) || 0;
+    const per    = parseFloat(ann.personal) || 0;
+    const dir    = ann.direct !== "" ? parseFloat(ann.direct)
+                 : (extras.length > 0 ? Math.max(0, (parseFloat(ann.allocated) || 0) - ind - per)
+                 : r.gpsMiles);
+    let total = ind + per + dir;
+    for (const ex of extras) {
+      const sAlloc = parseFloat(ex.allocated) || 0;
+      const sInd   = parseFloat(ex.indirect) || 0;
+      const sPer   = parseFloat(ex.personal) || 0;
+      const sDir   = ex.direct !== "" ? parseFloat(ex.direct) : Math.max(0, sAlloc - sInd - sPer);
+      total += sInd + sPer + sDir;
+    }
+    return sum + total;
   }, 0);
 
   const archiveGrandTotal = archiveDisplayRows.reduce((sum, r) => {
@@ -735,107 +882,213 @@ export default function Home() {
     row: GpsRow,
     i: number,
     ann: RowAnnotation,
-    setAnn: (key: string, field: keyof RowAnnotation, val: string) => void,
-    savedInfo?: { id: number; is_exported: boolean },
+    setAnn: (key: string, field: keyof RowAnnotation, val: string, miles?: number) => void,
+    savedInfo?: { id: number; is_exported: boolean; splitIds?: number[] },
     readonly = false,
   ) {
-    const indirect = parseFloat(ann.indirect) || 0;
-    const personal = parseFloat(ann.personal) || 0;
-    const direct   = ann.direct !== "" ? parseFloat(ann.direct) : row.gpsMiles;
-    const total    = indirect + personal + direct;
+    const extras     = extraSplits[row.key] ?? [];
+    const isSplit    = extras.length > 0;
+    const indirect   = parseFloat(ann.indirect) || 0;
+    const personal   = parseFloat(ann.personal) || 0;
+    const primaryAlloc = isSplit ? (parseFloat(ann.allocated) || 0) : row.gpsMiles;
+    const direct     = ann.direct !== ""
+      ? parseFloat(ann.direct)
+      : (isSplit ? Math.max(0, primaryAlloc - indirect - personal) : row.gpsMiles);
+    const total      = isSplit ? primaryAlloc : (indirect + personal + direct);
+
+    const extraAllocSum  = isSplit ? extras.reduce((s, ex) => s + (parseFloat(ex.allocated) || 0), 0) : 0;
+    const splitMismatch  = isSplit && Math.abs(primaryAlloc + extraAllocSum - row.gpsMiles) > 0.05;
+    const rowBg = cn("border-b border-white/5 hover:bg-white/[0.03] transition-colors", i % 2 !== 0 && "bg-white/[0.015]");
 
     return (
-      <tr key={row.key}
-        className={cn("border-b border-white/5 hover:bg-white/[0.03] transition-colors",
-          i % 2 !== 0 && "bg-white/[0.015]")}>
-        {/* Status */}
-        <td className="px-2 py-1.5 w-10">
-          <div className="flex items-center gap-0.5">
-            {savedInfo ? (
-              <span aria-label={savedInfo.is_exported ? "Saved & exported" : "Saved"}>
-                <CheckCircle2
-                  className={cn("h-3.5 w-3.5",
-                    savedInfo.is_exported ? "text-white/20" : "text-emerald-400/70")}
-                />
+      <Fragment key={row.key}>
+        {/* ── Primary row ── */}
+        <tr className={rowBg}>
+          {/* Status */}
+          <td className="px-2 py-1.5 w-10">
+            <div className="flex items-center gap-0.5">
+              {savedInfo ? (
+                <span aria-label={savedInfo.is_exported ? "Saved & exported" : "Saved"}>
+                  <CheckCircle2 className={cn("h-3.5 w-3.5", savedInfo.is_exported ? "text-white/20" : "text-emerald-400/70")} />
+                </span>
+              ) : sessionPrefilled.has(row.key) ? (
+                <span title="Pre-filled from driver session">
+                  <User className="h-3.5 w-3.5 text-sky-400/70" />
+                </span>
+              ) : null}
+              {sessionMultiple.has(row.key) && (
+                <span title="Multiple driver sessions this day">
+                  <AlertTriangle className="h-3 w-3 text-amber-400/70" />
+                </span>
+              )}
+              {!readonly && (
+                <button onClick={() => handleSplitRow(row.key, row.gpsMiles)}
+                  title="Split this day's mileage across multiple projects"
+                  className="text-white/20 hover:text-amber-400 transition-colors ml-0.5">
+                  <Scissors className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+          </td>
+          <td className="px-3 py-1.5 font-mono text-xs text-white/70 whitespace-nowrap">{row.date}</td>
+          <td className="px-3 py-1.5 text-xs text-amber-400/80 whitespace-nowrap">{row.deviceName}</td>
+          <td className="px-3 py-1.5 font-mono text-xs text-white/40 text-right">{row.beginOdo.toFixed(1)}</td>
+          <td className="px-3 py-1.5 font-mono text-xs text-white/40 text-right">{row.endOdo.toFixed(1)}</td>
+          <td className="px-1.5 py-1">
+            {readonly
+              ? <span className="block px-2 text-xs font-mono text-white/60">{indirect > 0 ? indirect.toFixed(1) : "—"}</span>
+              : <Input type="number" min="0" step="0.1" placeholder="—" value={ann.indirect}
+                  onChange={e => setAnn(row.key, "indirect", e.target.value, row.gpsMiles)}
+                  className="h-7 w-full text-xs font-mono bg-white/5 border-white/10 focus:border-amber-500/50 focus:bg-white/10 placeholder:text-white/15 px-2" />}
+          </td>
+          <td className="px-1.5 py-1">
+            {readonly
+              ? <span className="block px-2 text-xs font-mono text-white/60">{personal > 0 ? personal.toFixed(1) : "—"}</span>
+              : <Input type="number" min="0" step="0.1" placeholder="—" value={ann.personal}
+                  onChange={e => setAnn(row.key, "personal", e.target.value, row.gpsMiles)}
+                  className="h-7 w-full text-xs font-mono bg-white/5 border-white/10 focus:border-amber-500/50 focus:bg-white/10 placeholder:text-white/15 px-2" />}
+          </td>
+          <td className="px-1.5 py-1">
+            {readonly
+              ? <span className="block px-2 text-xs font-mono text-white/60">{direct.toFixed(1)}</span>
+              : <Input type="number" min="0" step="0.1"
+                  placeholder={isSplit ? Math.max(0, primaryAlloc - indirect - personal).toFixed(1) : row.gpsMiles.toFixed(1)}
+                  value={ann.direct}
+                  onChange={e => setAnn(row.key, "direct", e.target.value, row.gpsMiles)}
+                  className="h-7 w-full text-xs font-mono bg-white/5 border-white/10 focus:border-amber-500/50 focus:bg-white/10 placeholder:text-white/40 px-2" />}
+          </td>
+          <td className="px-1.5 py-1 min-w-[160px]">
+            <div className={cn("h-7 rounded border transition-colors",
+              readonly ? "border-white/5 bg-transparent" : "border-white/10 bg-white/5 focus-within:border-amber-500/50 focus-within:bg-white/10")}>
+              <Combobox value={ann.project} onChange={v => setAnn(row.key, "project", v, row.gpsMiles)}
+                options={projectOptions} placeholder="Project…" disabled={readonly}
+                allowNew={!readonly} onCreateNew={readonly ? undefined : handleCreateProject} />
+            </div>
+          </td>
+          {/* TOTAL / ALLOCATED */}
+          <td className="px-3 py-1.5 font-mono text-xs font-bold text-white text-right whitespace-nowrap">
+            {isSplit && !readonly
+              ? <Input type="number" min="0" step="0.1" value={ann.allocated}
+                  onChange={e => setAnn(row.key, "allocated", e.target.value, row.gpsMiles)}
+                  placeholder={row.gpsMiles.toFixed(1)}
+                  title="Miles allocated to this project from today's GPS total"
+                  className={cn("h-7 w-[78px] text-xs font-mono border focus:bg-white/10 placeholder:text-white/30 px-2 text-right",
+                    splitMismatch ? "border-red-500/50 bg-red-500/5" : "bg-white/5 border-white/10 focus:border-amber-500/50")} />
+              : total.toFixed(1)
+            }
+          </td>
+          <td className="px-1.5 py-1 min-w-[150px]">
+            <div className={cn("h-7 rounded border transition-colors",
+              readonly ? "border-white/5 bg-transparent" : "border-white/10 bg-white/5 focus-within:border-amber-500/50 focus-within:bg-white/10")}>
+              <Combobox value={ann.leader} onChange={v => setAnn(row.key, "leader", v)}
+                options={leaderOptions} placeholder="Leader…" disabled={readonly}
+                allowNew={!readonly} onCreateNew={readonly ? undefined : handleCreateLeader} />
+            </div>
+          </td>
+        </tr>
+
+        {/* ── Extra split rows ── */}
+        {extras.map((split, si) => {
+          const sAlloc = parseFloat(split.allocated) || 0;
+          const sInd   = parseFloat(split.indirect) || 0;
+          const sPer   = parseFloat(split.personal) || 0;
+          const sDir   = split.direct !== "" ? parseFloat(split.direct) : Math.max(0, sAlloc - sInd - sPer);
+          return (
+            <tr key={`${row.key}_s${si + 1}`} className="border-b border-white/5 bg-sky-950/20">
+              <td className="px-2 py-1.5 w-10">
+                {!readonly && (
+                  <button onClick={() => handleRemoveExtraSplit(row.key, si, savedInfo?.splitIds?.[si])}
+                    title="Remove this split"
+                    className="text-white/20 hover:text-red-400 transition-colors">
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </td>
+              <td className="px-3 py-1.5 text-xs text-white/25">↳ {si + 2}</td>
+              <td /><td /><td />
+              <td className="px-1.5 py-1">
+                {readonly
+                  ? <span className="block px-2 text-xs font-mono text-white/60">{sInd > 0 ? sInd.toFixed(1) : "—"}</span>
+                  : <Input type="number" min="0" step="0.1" placeholder="—" value={split.indirect}
+                      onChange={e => setExtraSplit(row.key, si, "indirect", e.target.value, row.gpsMiles)}
+                      className="h-7 w-full text-xs font-mono bg-white/5 border-white/10 focus:border-amber-500/50 focus:bg-white/10 placeholder:text-white/15 px-2" />}
+              </td>
+              <td className="px-1.5 py-1">
+                {readonly
+                  ? <span className="block px-2 text-xs font-mono text-white/60">{sPer > 0 ? sPer.toFixed(1) : "—"}</span>
+                  : <Input type="number" min="0" step="0.1" placeholder="—" value={split.personal}
+                      onChange={e => setExtraSplit(row.key, si, "personal", e.target.value, row.gpsMiles)}
+                      className="h-7 w-full text-xs font-mono bg-white/5 border-white/10 focus:border-amber-500/50 focus:bg-white/10 placeholder:text-white/15 px-2" />}
+              </td>
+              <td className="px-1.5 py-1">
+                <span className="block px-2 text-xs font-mono text-white/60">{sDir.toFixed(1)}</span>
+              </td>
+              <td className="px-1.5 py-1 min-w-[160px]">
+                <div className={cn("h-7 rounded border transition-colors",
+                  readonly ? "border-white/5 bg-transparent" : "border-white/10 bg-white/5 focus-within:border-amber-500/50 focus-within:bg-white/10")}>
+                  <Combobox value={split.project} onChange={v => setExtraSplit(row.key, si, "project", v, row.gpsMiles)}
+                    options={projectOptions} placeholder="Project…" disabled={readonly}
+                    allowNew={!readonly} onCreateNew={readonly ? undefined : handleCreateProject} />
+                </div>
+              </td>
+              <td className="px-3 py-1.5 text-right">
+                {readonly
+                  ? <span className="font-mono text-xs font-bold text-white/60">{sAlloc.toFixed(1)}</span>
+                  : <Input type="number" min="0" step="0.1" value={split.allocated}
+                      onChange={e => setExtraSplit(row.key, si, "allocated", e.target.value, row.gpsMiles)}
+                      placeholder="0"
+                      title="Miles allocated to this project from today's GPS total"
+                      className={cn("h-7 w-[78px] text-xs font-mono border focus:bg-white/10 placeholder:text-white/30 px-2 text-right",
+                        splitMismatch ? "border-red-500/50 bg-red-500/5" : "bg-white/5 border-white/10 focus:border-amber-500/50")} />}
+              </td>
+              <td className="px-1.5 py-1 min-w-[150px]">
+                <div className={cn("h-7 rounded border transition-colors",
+                  readonly ? "border-white/5 bg-transparent" : "border-white/10 bg-white/5 focus-within:border-amber-500/50 focus-within:bg-white/10")}>
+                  <Combobox value={split.leader} onChange={v => setExtraSplit(row.key, si, "leader", v)}
+                    options={leaderOptions} placeholder="Leader…" disabled={readonly}
+                    allowNew={!readonly} onCreateNew={readonly ? undefined : handleCreateLeader} />
+                </div>
+              </td>
+            </tr>
+          );
+        })}
+
+        {/* ── GPS total indicator when split (highlights mismatch) ── */}
+        {isSplit && (
+          <tr className="border-b border-white/5">
+            <td colSpan={9} />
+            <td className="px-3 py-0.5 text-right">
+              <span className={cn("text-[10px] font-mono", splitMismatch ? "text-red-400/80" : "text-white/20")}>
+                GPS {row.gpsMiles.toFixed(1)} mi total{splitMismatch && " ⚠"}
               </span>
-            ) : sessionPrefilled.has(row.key) ? (
-              <span title="Pre-filled from driver session">
-                <User className="h-3.5 w-3.5 text-sky-400/70" />
-              </span>
-            ) : null}
-            {sessionMultiple.has(row.key) && (
-              <span title="Multiple driver sessions this day">
-                <AlertTriangle className="h-3 w-3 text-amber-400/70" />
-              </span>
-            )}
-          </div>
-        </td>
-        {/* DATE */}
-        <td className="px-3 py-1.5 font-mono text-xs text-white/70 whitespace-nowrap">{row.date}</td>
-        {/* VEHICLE */}
-        <td className="px-3 py-1.5 text-xs text-amber-400/80 whitespace-nowrap">{row.deviceName}</td>
-        {/* BEGIN ODO */}
-        <td className="px-3 py-1.5 font-mono text-xs text-white/40 text-right">{row.beginOdo.toFixed(1)}</td>
-        {/* END ODO */}
-        <td className="px-3 py-1.5 font-mono text-xs text-white/40 text-right">{row.endOdo.toFixed(1)}</td>
-        {/* INDIRECT */}
-        <td className="px-1.5 py-1">
-          {readonly
-            ? <span className="block px-2 text-xs font-mono text-white/60">{indirect > 0 ? indirect.toFixed(1) : "—"}</span>
-            : <Input type="number" min="0" step="0.1" placeholder="—" value={ann.indirect}
-                onChange={e => setAnn(row.key, "indirect", e.target.value)}
-                className="h-7 w-full text-xs font-mono bg-white/5 border-white/10 focus:border-amber-500/50 focus:bg-white/10 placeholder:text-white/15 px-2" />}
-        </td>
-        {/* PERSONAL */}
-        <td className="px-1.5 py-1">
-          {readonly
-            ? <span className="block px-2 text-xs font-mono text-white/60">{personal > 0 ? personal.toFixed(1) : "—"}</span>
-            : <Input type="number" min="0" step="0.1" placeholder="—" value={ann.personal}
-                onChange={e => setAnn(row.key, "personal", e.target.value)}
-                className="h-7 w-full text-xs font-mono bg-white/5 border-white/10 focus:border-amber-500/50 focus:bg-white/10 placeholder:text-white/15 px-2" />}
-        </td>
-        {/* DIRECT */}
-        <td className="px-1.5 py-1">
-          {readonly
-            ? <span className="block px-2 text-xs font-mono text-white/60">{direct.toFixed(1)}</span>
-            : <Input type="number" min="0" step="0.1" placeholder={row.gpsMiles.toFixed(1)} value={ann.direct}
-                onChange={e => setAnn(row.key, "direct", e.target.value)}
-                className="h-7 w-full text-xs font-mono bg-white/5 border-white/10 focus:border-amber-500/50 focus:bg-white/10 placeholder:text-white/40 px-2" />}
-        </td>
-        {/* PROJECT */}
-        <td className="px-1.5 py-1 min-w-[160px]">
-          <div className={cn("h-7 rounded border transition-colors",
-            readonly ? "border-white/5 bg-transparent" : "border-white/10 bg-white/5 focus-within:border-amber-500/50 focus-within:bg-white/10")}>
-            <Combobox value={ann.project} onChange={v => setAnn(row.key, "project", v)}
-              options={projectOptions} placeholder="Project…" disabled={readonly}
-              allowNew={!readonly} onCreateNew={readonly ? undefined : handleCreateProject} />
-          </div>
-        </td>
-        {/* TOTAL */}
-        <td className="px-3 py-1.5 font-mono text-xs font-bold text-white text-right whitespace-nowrap">
-          {total.toFixed(1)}
-        </td>
-        {/* TEAM LEADER */}
-        <td className="px-1.5 py-1 min-w-[150px]">
-          <div className={cn("h-7 rounded border transition-colors",
-            readonly ? "border-white/5 bg-transparent" : "border-white/10 bg-white/5 focus-within:border-amber-500/50 focus-within:bg-white/10")}>
-            <Combobox value={ann.leader} onChange={v => setAnn(row.key, "leader", v)}
-              options={leaderOptions} placeholder="Leader…" disabled={readonly}
-              allowNew={!readonly} onCreateNew={readonly ? undefined : handleCreateLeader} />
-          </div>
-        </td>
-      </tr>
+            </td>
+            <td />
+          </tr>
+        )}
+      </Fragment>
     );
   }
 
   // ── Footer renderer ─────────────────────────────────────────────────────────
   function renderFooter(rows: GpsRow[], getAnn: (key: string) => RowAnnotation) {
-    const totI = rows.reduce((s, r) => s + (parseFloat(getAnn(r.key).indirect) || 0), 0);
-    const totP = rows.reduce((s, r) => s + (parseFloat(getAnn(r.key).personal) || 0), 0);
-    const totD = rows.reduce((s, r) => {
-      const ann = getAnn(r.key);
-      return s + (ann.direct !== "" ? parseFloat(ann.direct) : r.gpsMiles);
-    }, 0);
+    let totI = 0, totP = 0, totD = 0;
+    for (const r of rows) {
+      const ann    = getAnn(r.key);
+      const exs    = extraSplits[r.key] ?? [];
+      const ind    = parseFloat(ann.indirect) || 0;
+      const per    = parseFloat(ann.personal) || 0;
+      const dir    = ann.direct !== "" ? parseFloat(ann.direct)
+                   : (exs.length > 0 ? Math.max(0, (parseFloat(ann.allocated) || 0) - ind - per)
+                   : r.gpsMiles);
+      totI += ind; totP += per; totD += dir;
+      for (const ex of exs) {
+        const sAlloc = parseFloat(ex.allocated) || 0;
+        const sInd   = parseFloat(ex.indirect) || 0;
+        const sPer   = parseFloat(ex.personal) || 0;
+        const sDir   = ex.direct !== "" ? parseFloat(ex.direct) : Math.max(0, sAlloc - sInd - sPer);
+        totI += sInd; totP += sPer; totD += sDir;
+      }
+    }
     return (
       <tfoot>
         <tr className="border-t-2 border-amber-500/30 bg-amber-500/5">
