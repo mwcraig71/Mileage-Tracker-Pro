@@ -6,8 +6,6 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type GetMileageSummaryParams = {
-device_id: string;
-from: string;
-to: string;
-};
+export interface ProjectInput {
+  project_number: string;
+}

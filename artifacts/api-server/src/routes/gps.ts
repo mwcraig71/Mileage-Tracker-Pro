@@ -146,4 +146,55 @@ router.get("/mileage-summary", async (req, res) => {
   }
 });
 
+router.get("/odometer-range", async (req, res) => {
+  try {
+    const { device_id, from, to } = req.query as { device_id?: string; from?: string; to?: string };
+    if (!device_id || !from || !to) {
+      res.status(400).json({ error: "device_id, from, and to are required" });
+      return;
+    }
+    const apiKey = getApiKey();
+    const dtFrom = new Date(from);
+    dtFrom.setHours(0, 0, 0, 0);
+    const dtTo = new Date(to);
+    dtTo.setHours(23, 59, 59, 999);
+
+    const url = `${BASE_URL}/device-point?api-key=${apiKey}&device_id=${device_id}&dt_server_from=${dtFrom.toISOString()}&dt_server_to=${dtTo.toISOString()}&limit=5000`;
+    const ptResponse = await fetch(url);
+    if (!ptResponse.ok) {
+      res.status(502).json({ error: "Failed to fetch device points" });
+      return;
+    }
+    const ptData = await ptResponse.json() as { result_list: unknown[] };
+    const points = (ptData.result_list || []) as any[];
+
+    const sorted = points.slice().sort((a, b) =>
+      (a.dt_tracker || "").localeCompare(b.dt_tracker || "")
+    );
+
+    let firstOdo: number | null = null;
+    let lastOdo: number | null = null;
+    for (const p of sorted) {
+      const odo = p.device_point_detail?.vbus_odometer?.value;
+      if (odo == null || odo === 0) continue;
+      if (firstOdo === null) firstOdo = odo;
+      lastOdo = odo;
+    }
+
+    const begin = firstOdo != null ? metersToMiles(firstOdo) : 0;
+    const end = lastOdo != null ? metersToMiles(lastOdo) : 0;
+
+    res.json({
+      device_id,
+      from,
+      to,
+      begin_odometer_miles: begin,
+      end_odometer_miles: end,
+      total_miles: Math.max(0, Math.round((end - begin) * 10) / 10),
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 export default router;

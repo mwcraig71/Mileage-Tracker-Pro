@@ -1,314 +1,622 @@
-import { useState } from "react";
-import { format, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subMonths } from "date-fns";
-import { Download, Printer, Truck, Calendar as CalendarIcon, Filter, MapPin, AlertCircle } from "lucide-react";
-import { useGetGpsDevices, useGetMileageSummary, getGetMileageSummaryQueryKey } from "@workspace/api-client-react";
-
+import { useState, useMemo } from "react";
+import {
+  format, startOfWeek, endOfWeek, startOfMonth, endOfMonth,
+  subDays, subMonths,
+} from "date-fns";
+import {
+  Truck, Plus, Trash2, Printer, Download, Loader2, X, Check, ChevronsUpDown,
+} from "lucide-react";
+import {
+  useGetGpsDevices,
+  useGetOdometerRange,
+  useListProjects,
+  useListTeamLeaders,
+  useListLogEntries,
+  useCreateProject,
+  useCreateTeamLeader,
+  useCreateLogEntry,
+  useDeleteLogEntry,
+} from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
+} from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useQueryClient } from "@tanstack/react-query";
+import { cn } from "@/lib/utils";
 
-type DateRangePreset = "this-week" | "last-week" | "this-month" | "last-month" | "custom";
+type DatePreset = "this-week" | "last-week" | "this-month" | "last-month" | "custom";
 
-export default function Home() {
-  const [deviceId, setDeviceId] = useState<string>("");
-  const [datePreset, setDatePreset] = useState<DateRangePreset>("this-week");
-  const [customFrom, setCustomFrom] = useState<string>(format(startOfWeek(new Date()), "yyyy-MM-dd"));
-  const [customTo, setCustomTo] = useState<string>(format(endOfWeek(new Date()), "yyyy-MM-dd"));
-  
-  const [submitted, setSubmitted] = useState(false);
-
-  const { data: devices = [], isLoading: isLoadingDevices } = useGetGpsDevices();
-
-  let from = customFrom;
-  let to = customTo;
-
+function getPresetRange(preset: DatePreset, customFrom: string, customTo: string) {
   const now = new Date();
-  if (datePreset === "this-week") {
-    from = format(startOfWeek(now), "yyyy-MM-dd");
-    to = format(endOfWeek(now), "yyyy-MM-dd");
-  } else if (datePreset === "last-week") {
-    const lastWeek = subDays(now, 7);
-    from = format(startOfWeek(lastWeek), "yyyy-MM-dd");
-    to = format(endOfWeek(lastWeek), "yyyy-MM-dd");
-  } else if (datePreset === "this-month") {
-    from = format(startOfMonth(now), "yyyy-MM-dd");
-    to = format(endOfMonth(now), "yyyy-MM-dd");
-  } else if (datePreset === "last-month") {
-    const lastMonth = subMonths(now, 1);
-    from = format(startOfMonth(lastMonth), "yyyy-MM-dd");
-    to = format(endOfMonth(lastMonth), "yyyy-MM-dd");
-  }
+  if (preset === "this-week") return { from: format(startOfWeek(now), "yyyy-MM-dd"), to: format(endOfWeek(now), "yyyy-MM-dd") };
+  if (preset === "last-week") { const lw = subDays(now, 7); return { from: format(startOfWeek(lw), "yyyy-MM-dd"), to: format(endOfWeek(lw), "yyyy-MM-dd") }; }
+  if (preset === "this-month") return { from: format(startOfMonth(now), "yyyy-MM-dd"), to: format(endOfMonth(now), "yyyy-MM-dd") };
+  if (preset === "last-month") { const lm = subMonths(now, 1); return { from: format(startOfMonth(lm), "yyyy-MM-dd"), to: format(endOfMonth(lm), "yyyy-MM-dd") }; }
+  return { from: customFrom, to: customTo };
+}
 
-  const { data: summary, isLoading: isGenerating, isFetching } = useGetMileageSummary(
-    { device_id: deviceId, from, to },
-    { 
-      query: { 
-        enabled: !!deviceId && !!from && !!to && submitted,
-        queryKey: getGetMileageSummaryQueryKey({ device_id: deviceId, from, to })
-      } 
-    }
-  );
+interface ComboboxProps {
+  value: string;
+  onChange: (v: string) => void;
+  options: string[];
+  placeholder: string;
+  allowNew?: boolean;
+  onCreateNew?: (v: string) => Promise<void>;
+  disabled?: boolean;
+}
 
-  const handleGenerate = () => {
-    if (deviceId && from && to) {
-      setSubmitted(true);
-    }
+function Combobox({ value, onChange, options, placeholder, allowNew, onCreateNew, disabled }: ComboboxProps) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [creating, setCreating] = useState(false);
+
+  const filtered = options.filter(o => o.toLowerCase().includes(search.toLowerCase()));
+  const isNew = allowNew && search.trim() && !options.some(o => o.toLowerCase() === search.trim().toLowerCase());
+
+  const handleSelect = (v: string) => {
+    onChange(v);
+    setOpen(false);
+    setSearch("");
   };
 
-  const handlePrint = () => {
-    window.print();
-  };
-
-  const handleExportCSV = () => {
-    if (!summary || !summary.daily_logs.length) return;
-    
-    const headers = ["Date", "Start Odometer", "End Odometer", "Miles Driven"];
-    const rows = summary.daily_logs.map(log => [
-      log.date,
-      log.start_odometer_miles.toFixed(1),
-      log.end_odometer_miles.toFixed(1),
-      log.miles_driven.toFixed(1)
-    ]);
-    
-    const csvContent = [
-      headers.join(","),
-      ...rows.map(e => e.join(","))
-    ].join("\n");
-    
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `mileage-log-${summary.display_name.replace(/ /g, '-')}-${from}-to-${to}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const handleCreate = async () => {
+    if (!onCreateNew || !search.trim()) return;
+    setCreating(true);
+    try {
+      await onCreateNew(search.trim());
+      onChange(search.trim());
+      setOpen(false);
+      setSearch("");
+    } finally {
+      setCreating(false);
+    }
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground dark pb-20">
-      <header className="border-b border-border/40 bg-card/50 backdrop-blur sticky top-0 z-10">
-        <div className="container mx-auto max-w-6xl px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2 text-primary">
-            <Truck className="h-6 w-6" />
-            <h1 className="font-bold text-lg tracking-tight text-foreground">FleetLog</h1>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          disabled={disabled}
+          className="w-full justify-between h-9 bg-background/50 border-border/60 font-normal text-sm"
+        >
+          <span className={cn("truncate", !value && "text-muted-foreground")}>
+            {value || placeholder}
+          </span>
+          <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[260px] p-0" align="start">
+        <Command>
+          <CommandInput
+            placeholder={`Search or add new…`}
+            value={search}
+            onValueChange={setSearch}
+          />
+          <CommandList>
+            <CommandEmpty>
+              {isNew ? (
+                <button
+                  onClick={handleCreate}
+                  disabled={creating}
+                  className="w-full text-left px-3 py-2 text-sm flex items-center gap-2 hover:bg-muted/60 text-primary"
+                >
+                  {creating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                  Add "{search.trim()}"
+                </button>
+              ) : (
+                <p className="text-center text-xs text-muted-foreground py-4">No results.</p>
+              )}
+            </CommandEmpty>
+            <CommandGroup>
+              {filtered.map(opt => (
+                <CommandItem key={opt} value={opt} onSelect={() => handleSelect(opt)}>
+                  <Check className={cn("mr-2 h-3.5 w-3.5", value === opt ? "opacity-100" : "opacity-0")} />
+                  {opt}
+                </CommandItem>
+              ))}
+              {isNew && filtered.length > 0 && (
+                <CommandItem
+                  value={`__new__${search}`}
+                  onSelect={handleCreate}
+                  className="text-primary"
+                >
+                  {creating ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Plus className="mr-2 h-3.5 w-3.5" />}
+                  Add "{search.trim()}"
+                </CommandItem>
+              )}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+const EMPTY_FORM = {
+  deviceId: "",
+  datePreset: "this-week" as DatePreset,
+  customFrom: format(startOfWeek(new Date()), "yyyy-MM-dd"),
+  customTo: format(endOfWeek(new Date()), "yyyy-MM-dd"),
+  beginOdometer: "",
+  endOdometer: "",
+  indirectMiles: "",
+  personalMiles: "",
+  directMiles: "",
+  projectNumber: "",
+  teamLeaderName: "",
+};
+
+export default function Home() {
+  const qc = useQueryClient();
+  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [gpsLoaded, setGpsLoaded] = useState(false);
+  const [fetchOdo, setFetchOdo] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const { from, to } = getPresetRange(form.datePreset, form.customFrom, form.customTo);
+
+  const { data: devices = [], isLoading: devicesLoading } = useGetGpsDevices();
+  const { data: projects = [] } = useListProjects();
+  const { data: teamLeaders = [] } = useListTeamLeaders();
+  const { data: entries = [], isLoading: entriesLoading } = useListLogEntries();
+
+  const projectOptions = useMemo(() => projects.map(p => p.project_number), [projects]);
+  const leaderOptions = useMemo(() => teamLeaders.map(t => t.name), [teamLeaders]);
+
+  const { data: odoRange, isFetching: odoFetching } = useGetOdometerRange(
+    { device_id: form.deviceId, from, to },
+    { query: { enabled: fetchOdo && !!form.deviceId && !!from && !!to } }
+  );
+
+  const createProject = useCreateProject();
+  const createLeader = useCreateTeamLeader();
+  const createEntry = useCreateLogEntry();
+  const deleteEntry = useDeleteLogEntry();
+
+  const setField = (key: keyof typeof EMPTY_FORM, val: string) =>
+    setForm(f => ({ ...f, [key]: val }));
+
+  const handleFetchOdo = () => {
+    if (!form.deviceId) return;
+    setFetchOdo(false);
+    setTimeout(() => setFetchOdo(true), 0);
+    setGpsLoaded(false);
+  };
+
+  if (odoRange && fetchOdo && !gpsLoaded) {
+    setForm(f => ({
+      ...f,
+      beginOdometer: odoRange.begin_odometer_miles.toFixed(1),
+      endOdometer: odoRange.end_odometer_miles.toFixed(1),
+      directMiles: odoRange.total_miles.toFixed(1),
+    }));
+    setGpsLoaded(true);
+  }
+
+  const totalMiles = (
+    (parseFloat(form.indirectMiles) || 0) +
+    (parseFloat(form.personalMiles) || 0) +
+    (parseFloat(form.directMiles) || 0)
+  );
+
+  const selectedDevice = devices.find(d => d.device_id === form.deviceId);
+
+  const handleSave = async () => {
+    if (!form.deviceId || !form.beginOdometer || !form.endOdometer || !form.projectNumber || !form.teamLeaderName) return;
+    setSaving(true);
+    try {
+      await createEntry.mutateAsync({
+        data: {
+          device_id: form.deviceId,
+          device_name: selectedDevice?.display_name ?? form.deviceId,
+          start_date: from,
+          end_date: to,
+          begin_odometer: parseFloat(form.beginOdometer),
+          end_odometer: parseFloat(form.endOdometer),
+          indirect_miles: parseFloat(form.indirectMiles) || 0,
+          personal_miles: parseFloat(form.personalMiles) || 0,
+          direct_miles: parseFloat(form.directMiles) || 0,
+          project_number: form.projectNumber,
+          team_leader_name: form.teamLeaderName,
+        },
+      });
+      qc.invalidateQueries({ queryKey: ["/api/log-entries"] });
+      setShowAddDialog(false);
+      setForm(EMPTY_FORM);
+      setFetchOdo(false);
+      setGpsLoaded(false);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (id: number) => {
+    await deleteEntry.mutateAsync({ id });
+    qc.invalidateQueries({ queryKey: ["/api/log-entries"] });
+  };
+
+  const handleCreateProject = async (name: string) => {
+    await createProject.mutateAsync({ data: { project_number: name } });
+    qc.invalidateQueries({ queryKey: ["/api/projects"] });
+  };
+
+  const handleCreateLeader = async (name: string) => {
+    await createLeader.mutateAsync({ data: { name } });
+    qc.invalidateQueries({ queryKey: ["/api/team-leaders"] });
+  };
+
+  const handleExportCSV = () => {
+    if (!entries.length) return;
+    const headers = ["START DATE","END DATE","BEGIN ODOMETER","END ODOMETER","INDIRECT","PERSONAL/UNALLOWABLE","JOB (DIRECT)","PROJECT NUMBER","TOTAL MILES","Team Leader","Vehicle"];
+    const rows = entries.map(e => [
+      e.start_date, e.end_date,
+      e.begin_odometer.toFixed(1), e.end_odometer.toFixed(1),
+      e.indirect_miles.toFixed(1), e.personal_miles.toFixed(1), e.direct_miles.toFixed(1),
+      e.project_number, e.total_miles.toFixed(1),
+      e.team_leader_name, e.device_name,
+    ]);
+    const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `mileage-log-${format(new Date(), "yyyy-MM-dd")}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const grandTotal = entries.reduce((s, e) => s + e.total_miles, 0);
+  const grandDirect = entries.reduce((s, e) => s + e.direct_miles, 0);
+  const grandIndirect = entries.reduce((s, e) => s + e.indirect_miles, 0);
+  const grandPersonal = entries.reduce((s, e) => s + e.personal_miles, 0);
+
+  const canSave = !!form.deviceId && !!form.beginOdometer && !!form.endOdometer && !!form.projectNumber && !!form.teamLeaderName;
+
+  return (
+    <div className="min-h-screen bg-[#0d1117] text-foreground dark pb-20">
+      {/* Header */}
+      <header className="border-b border-white/10 bg-[#0d1117]/90 backdrop-blur sticky top-0 z-10 print:hidden">
+        <div className="container mx-auto max-w-7xl px-4 h-14 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <Truck className="h-5 w-5 text-amber-400" />
+            <span className="font-bold text-base tracking-tight">FleetLog</span>
+            <span className="text-xs text-white/30 font-mono ml-1">Mileage Log</span>
           </div>
-          <div className="flex items-center gap-3">
-            <Badge variant="outline" className="bg-background/50 border-border/60 text-muted-foreground font-mono">v1.2.0</Badge>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => window.print()}
+              className="h-8 text-xs text-white/60 hover:text-white hover:bg-white/10"
+            >
+              <Printer className="h-3.5 w-3.5 mr-1.5" />
+              Print
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleExportCSV}
+              disabled={!entries.length}
+              className="h-8 text-xs text-white/60 hover:text-white hover:bg-white/10"
+            >
+              <Download className="h-3.5 w-3.5 mr-1.5" />
+              Export CSV
+            </Button>
+            <Button
+              size="sm"
+              className="h-8 text-xs bg-amber-500 hover:bg-amber-400 text-black font-semibold"
+              onClick={() => { setForm(EMPTY_FORM); setFetchOdo(false); setGpsLoaded(false); setShowAddDialog(true); }}
+            >
+              <Plus className="h-3.5 w-3.5 mr-1.5" />
+              Add Entry
+            </Button>
           </div>
         </div>
       </header>
 
-      <main className="container mx-auto max-w-6xl px-4 mt-8 space-y-6">
-        <div className="flex flex-col md:flex-row gap-4 justify-between items-start md:items-end">
-          <div>
-            <h2 className="text-2xl font-bold tracking-tight">Mileage Report Generator</h2>
-            <p className="text-muted-foreground mt-1">Select a vehicle and date range to compile daily odometer logs.</p>
-          </div>
+      {/* Print header */}
+      <div className="hidden print:block text-center py-4 border-b border-black mb-4">
+        <h1 className="text-xl font-bold">Fleet Mileage Log</h1>
+        <p className="text-sm text-gray-600">Generated {format(new Date(), "MMMM d, yyyy")}</p>
+      </div>
+
+      <main className="container mx-auto max-w-7xl px-4 mt-6">
+        {/* Stats row */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6 print:hidden">
+          {[
+            { label: "Total Miles", value: grandTotal.toFixed(1) },
+            { label: "Direct (Job)", value: grandDirect.toFixed(1) },
+            { label: "Indirect", value: grandIndirect.toFixed(1) },
+            { label: "Personal", value: grandPersonal.toFixed(1) },
+          ].map(({ label, value }) => (
+            <div key={label} className="rounded-lg border border-white/10 bg-white/5 px-4 py-3">
+              <p className="text-xs text-white/40 uppercase tracking-wider mb-1">{label}</p>
+              <p className="text-xl font-bold font-mono text-amber-400">{value}</p>
+            </div>
+          ))}
         </div>
 
-        <Card className="border-border/50 shadow-sm bg-card/50 print:hidden">
-          <CardContent className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-end">
-              <div className="space-y-2">
-                <Label htmlFor="truck-select" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                  <Truck className="h-3.5 w-3.5" />
-                  Vehicle
-                </Label>
-                <Select value={deviceId} onValueChange={(val) => { setDeviceId(val); setSubmitted(false); }} disabled={isLoadingDevices}>
-                  <SelectTrigger id="truck-select" data-testid="select-truck" className="h-10 bg-background/50">
-                    <SelectValue placeholder={isLoadingDevices ? "Loading fleet..." : "Select a truck"} />
+        {/* Log Table */}
+        <div className="rounded-lg border border-white/10 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-white/10 bg-white/5">
+                  {[
+                    "START DATE","END DATE","BEGIN ODOMETER","END ODOMETER",
+                    "INDIRECT","PERSONAL / UNALLOWABLE","JOB (DIRECT)",
+                    "PROJECT NUMBER","TOTAL MILES","TEAM LEADER","VEHICLE","",
+                  ].map(h => (
+                    <th key={h} className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-white/40 whitespace-nowrap">
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {entriesLoading ? (
+                  <tr>
+                    <td colSpan={12} className="py-16 text-center text-white/30 text-sm">
+                      <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2 text-amber-400/40" />
+                      Loading log entries…
+                    </td>
+                  </tr>
+                ) : entries.length === 0 ? (
+                  <tr>
+                    <td colSpan={12} className="py-16 text-center">
+                      <Truck className="h-8 w-8 mx-auto mb-3 text-white/10" />
+                      <p className="text-white/30 text-sm">No entries yet.</p>
+                      <p className="text-white/20 text-xs mt-1">Click "Add Entry" to log mileage.</p>
+                    </td>
+                  </tr>
+                ) : (
+                  entries.map((e, i) => (
+                    <tr key={e.id} className={cn("border-b border-white/5 hover:bg-white/5 transition-colors", i % 2 === 0 ? "" : "bg-white/[0.02]")}>
+                      <td className="px-3 py-2 font-mono text-xs text-white/70">{e.start_date}</td>
+                      <td className="px-3 py-2 font-mono text-xs text-white/70">{e.end_date}</td>
+                      <td className="px-3 py-2 font-mono text-xs text-white/60">{e.begin_odometer.toFixed(1)}</td>
+                      <td className="px-3 py-2 font-mono text-xs text-white/60">{e.end_odometer.toFixed(1)}</td>
+                      <td className="px-3 py-2 font-mono text-xs text-white/60">{e.indirect_miles > 0 ? e.indirect_miles.toFixed(1) : ""}</td>
+                      <td className="px-3 py-2 font-mono text-xs text-white/60">{e.personal_miles > 0 ? e.personal_miles.toFixed(1) : ""}</td>
+                      <td className="px-3 py-2 font-mono text-xs text-white/80 font-semibold">{e.direct_miles > 0 ? e.direct_miles.toFixed(1) : ""}</td>
+                      <td className="px-3 py-2 text-xs text-amber-400 font-medium">{e.project_number}</td>
+                      <td className="px-3 py-2 font-mono text-xs font-bold text-white">{e.total_miles.toFixed(1)}</td>
+                      <td className="px-3 py-2 text-xs text-white/70">{e.team_leader_name}</td>
+                      <td className="px-3 py-2 text-xs text-white/50">{e.device_name}</td>
+                      <td className="px-3 py-2 print:hidden">
+                        <button
+                          onClick={() => handleDelete(e.id)}
+                          className="text-white/20 hover:text-red-400 transition-colors"
+                          title="Delete entry"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+              {entries.length > 0 && (
+                <tfoot>
+                  <tr className="border-t-2 border-amber-500/30 bg-amber-500/5">
+                    <td colSpan={2} className="px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-white/40">Totals</td>
+                    <td className="px-3 py-2.5" />
+                    <td className="px-3 py-2.5" />
+                    <td className="px-3 py-2.5 font-mono text-xs font-bold text-white/70">{grandIndirect.toFixed(1)}</td>
+                    <td className="px-3 py-2.5 font-mono text-xs font-bold text-white/70">{grandPersonal.toFixed(1)}</td>
+                    <td className="px-3 py-2.5 font-mono text-xs font-bold text-white/80">{grandDirect.toFixed(1)}</td>
+                    <td className="px-3 py-2.5" />
+                    <td className="px-3 py-2.5 font-mono text-sm font-bold text-amber-400">{grandTotal.toFixed(1)}</td>
+                    <td colSpan={3} className="px-3 py-2.5" />
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+        </div>
+      </main>
+
+      {/* Add Entry Dialog */}
+      <Dialog open={showAddDialog} onOpenChange={(o) => { if (!saving) { setShowAddDialog(o); if (!o) { setFetchOdo(false); setGpsLoaded(false); } } }}>
+        <DialogContent className="sm:max-w-[640px] bg-[#161b22] border-white/10 text-foreground">
+          <DialogHeader>
+            <DialogTitle className="text-base font-semibold flex items-center gap-2">
+              <Plus className="h-4 w-4 text-amber-400" />
+              New Mileage Entry
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-5 py-2">
+            {/* Truck + Date Range */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs text-white/50 uppercase tracking-wider">Vehicle</Label>
+                <Select
+                  value={form.deviceId}
+                  onValueChange={v => { setField("deviceId", v); setGpsLoaded(false); setFetchOdo(false); }}
+                  disabled={devicesLoading}
+                >
+                  <SelectTrigger className="h-9 bg-background/30 border-white/10 text-sm">
+                    <SelectValue placeholder={devicesLoading ? "Loading…" : "Select truck"} />
                   </SelectTrigger>
                   <SelectContent>
-                    {devices.map(device => (
-                      <SelectItem key={device.device_id} value={device.device_id} data-testid={`option-truck-${device.device_id}`}>
-                        <div className="flex items-center gap-2">
-                          <div className={`h-2 w-2 rounded-full ${device.active_state === 'active' ? 'bg-primary' : 'bg-muted-foreground'}`} />
-                          {device.display_name}
-                        </div>
-                      </SelectItem>
+                    {devices.map(d => (
+                      <SelectItem key={d.device_id} value={d.device_id}>{d.display_name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="date-preset" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                  <CalendarIcon className="h-3.5 w-3.5" />
-                  Date Range
-                </Label>
-                <Select value={datePreset} onValueChange={(val: DateRangePreset) => { setDatePreset(val); setSubmitted(false); }}>
-                  <SelectTrigger id="date-preset" data-testid="select-date-preset" className="h-10 bg-background/50">
-                    <SelectValue placeholder="Select period" />
+              <div className="space-y-1.5">
+                <Label className="text-xs text-white/50 uppercase tracking-wider">Date Preset</Label>
+                <Select
+                  value={form.datePreset}
+                  onValueChange={v => { setField("datePreset", v as DatePreset); setGpsLoaded(false); setFetchOdo(false); }}
+                >
+                  <SelectTrigger className="h-9 bg-background/30 border-white/10 text-sm">
+                    <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="this-week" data-testid="option-preset-this-week">This Week</SelectItem>
-                    <SelectItem value="last-week" data-testid="option-preset-last-week">Last Week</SelectItem>
-                    <SelectItem value="this-month" data-testid="option-preset-this-month">This Month</SelectItem>
-                    <SelectItem value="last-month" data-testid="option-preset-last-month">Last Month</SelectItem>
-                    <SelectItem value="custom" data-testid="option-preset-custom">Custom Range</SelectItem>
+                    <SelectItem value="this-week">This Week</SelectItem>
+                    <SelectItem value="last-week">Last Week</SelectItem>
+                    <SelectItem value="this-month">This Month</SelectItem>
+                    <SelectItem value="last-month">Last Month</SelectItem>
+                    <SelectItem value="custom">Custom Range</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
+            </div>
 
-              {datePreset === "custom" ? (
-                <div className="col-span-1 md:col-span-2 grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="date-from" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">From</Label>
-                    <Input 
-                      id="date-from" 
-                      type="date" 
-                      value={customFrom} 
-                      onChange={(e) => { setCustomFrom(e.target.value); setSubmitted(false); }} 
-                      className="h-10 bg-background/50"
-                      data-testid="input-date-from"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="date-to" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">To</Label>
-                    <Input 
-                      id="date-to" 
-                      type="date" 
-                      value={customTo} 
-                      onChange={(e) => { setCustomTo(e.target.value); setSubmitted(false); }} 
-                      className="h-10 bg-background/50"
-                      data-testid="input-date-to"
-                    />
-                  </div>
+            {form.datePreset === "custom" && (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-white/50 uppercase tracking-wider">Start Date</Label>
+                  <Input type="date" value={form.customFrom} onChange={e => { setField("customFrom", e.target.value); setGpsLoaded(false); setFetchOdo(false); }} className="h-9 bg-background/30 border-white/10 text-sm" />
                 </div>
-              ) : (
-                <div className="col-span-1 md:col-span-1 flex items-center h-10 px-3 border border-dashed border-border rounded-md bg-muted/20 text-sm text-muted-foreground font-mono">
-                  {from} <span className="mx-2">to</span> {to}
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-white/50 uppercase tracking-wider">End Date</Label>
+                  <Input type="date" value={form.customTo} onChange={e => { setField("customTo", e.target.value); setGpsLoaded(false); setFetchOdo(false); }} className="h-9 bg-background/30 border-white/10 text-sm" />
                 </div>
-              )}
+              </div>
+            )}
 
-              <div className="col-span-1 md:col-span-1">
-                <Button 
-                  onClick={handleGenerate} 
-                  disabled={!deviceId || (isGenerating && isFetching)} 
-                  className="w-full h-10 font-semibold tracking-wide"
-                  data-testid="button-generate"
+            {form.datePreset !== "custom" && (
+              <div className="text-xs text-white/30 font-mono bg-white/5 rounded px-3 py-2">
+                {from} → {to}
+              </div>
+            )}
+
+            {/* GPS Pull Button + Odometer */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs text-white/50 uppercase tracking-wider">Odometer Readings (miles)</Label>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={!form.deviceId || odoFetching}
+                  onClick={handleFetchOdo}
+                  className="h-7 text-xs text-amber-400 hover:text-amber-300 hover:bg-amber-400/10 px-2"
                 >
-                  {isGenerating && isFetching ? (
-                    <span className="flex items-center gap-2">
-                      <div className="h-4 w-4 rounded-full border-2 border-primary-foreground border-t-transparent animate-spin" />
-                      Compiling...
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-2">
-                      <Filter className="h-4 w-4" />
-                      Generate Log
-                    </span>
-                  )}
+                  {odoFetching ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Truck className="h-3 w-3 mr-1" />}
+                  Pull from GPS
                 </Button>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {submitted && (isGenerating && isFetching) && (
-          <Card className="border-border/50 bg-card/20 border-dashed">
-            <CardContent className="p-8 flex flex-col items-center justify-center text-center space-y-4">
-              <div className="h-8 w-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-              <div className="space-y-1">
-                <p className="font-medium text-foreground">Crunching telemetry data...</p>
-                <p className="text-sm text-muted-foreground">Calculating odometer spans for selected period.</p>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {submitted && !(isGenerating && isFetching) && !summary && (
-          <Card className="border-border/50 bg-destructive/5 border-destructive/20">
-            <CardContent className="p-8 flex flex-col items-center justify-center text-center space-y-3">
-              <AlertCircle className="h-8 w-8 text-destructive/80" />
-              <p className="font-medium text-destructive">Failed to generate report</p>
-              <p className="text-sm text-muted-foreground max-w-sm">There was a problem retrieving data for this vehicle. Please try again or select a different date range.</p>
-            </CardContent>
-          </Card>
-        )}
-
-        {submitted && summary && (
-          <Card className="border-border/50 shadow-md overflow-hidden bg-card/80 backdrop-blur" data-testid="card-report-results">
-            <CardHeader className="border-b border-border/40 bg-muted/10 pb-6 print:border-none print:bg-transparent">
-              <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <CardTitle className="text-xl flex items-center gap-2">
-                    {summary.display_name}
-                    <Badge variant="secondary" className="font-mono text-xs font-normal bg-primary/10 text-primary hover:bg-primary/20">{summary.device_id}</Badge>
-                  </CardTitle>
-                  <CardDescription className="flex items-center gap-1.5 font-mono text-xs">
-                    <CalendarIcon className="h-3.5 w-3.5" />
-                    {summary.from} &mdash; {summary.to}
-                  </CardDescription>
+                  <Label className="text-[10px] text-white/30">BEGIN ODOMETER</Label>
+                  <Input
+                    type="number"
+                    step="0.1"
+                    placeholder="0.0"
+                    value={form.beginOdometer}
+                    onChange={e => setField("beginOdometer", e.target.value)}
+                    className="h-9 bg-background/30 border-white/10 text-sm font-mono"
+                  />
                 </div>
-                <div className="flex items-center gap-2 print:hidden">
-                  <Button variant="outline" size="sm" onClick={handlePrint} data-testid="button-print" className="h-8 bg-background border-border/60 hover:bg-muted hover:text-foreground transition-colors">
-                    <Printer className="h-4 w-4 mr-2" />
-                    Print
-                  </Button>
-                  <Button variant="default" size="sm" onClick={handleExportCSV} data-testid="button-export" className="h-8">
-                    <Download className="h-4 w-4 mr-2" />
-                    Export CSV
-                  </Button>
+                <div className="space-y-1">
+                  <Label className="text-[10px] text-white/30">END ODOMETER</Label>
+                  <Input
+                    type="number"
+                    step="0.1"
+                    placeholder="0.0"
+                    value={form.endOdometer}
+                    onChange={e => setField("endOdometer", e.target.value)}
+                    className="h-9 bg-background/30 border-white/10 text-sm font-mono"
+                  />
                 </div>
               </div>
-            </CardHeader>
-            <CardContent className="p-0">
-              {summary.daily_logs.length === 0 ? (
-                <div className="p-12 flex flex-col items-center justify-center text-center space-y-3" data-testid="empty-state">
-                  <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-2">
-                    <MapPin className="h-6 w-6 text-muted-foreground" />
+            </div>
+
+            {/* Mileage Breakdown */}
+            <div className="space-y-1.5">
+              <Label className="text-xs text-white/50 uppercase tracking-wider">Mileage Breakdown</Label>
+              <div className="grid grid-cols-3 gap-3">
+                {[
+                  { key: "indirectMiles" as const, label: "INDIRECT" },
+                  { key: "personalMiles" as const, label: "PERSONAL / UNALLOWABLE" },
+                  { key: "directMiles" as const, label: "JOB (DIRECT)" },
+                ].map(({ key, label }) => (
+                  <div key={key} className="space-y-1">
+                    <Label className="text-[10px] text-white/30 leading-none">{label}</Label>
+                    <Input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      placeholder="0.0"
+                      value={form[key]}
+                      onChange={e => setField(key, e.target.value)}
+                      className="h-9 bg-background/30 border-white/10 text-sm font-mono"
+                    />
                   </div>
-                  <p className="font-medium text-lg">No movement logged</p>
-                  <p className="text-sm text-muted-foreground">This vehicle did not register any GPS or odometer changes during the selected period.</p>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader className="bg-muted/30">
-                      <TableRow className="hover:bg-transparent border-border/40">
-                        <TableHead className="w-[180px] font-semibold text-xs uppercase tracking-wider text-muted-foreground h-11">Date</TableHead>
-                        <TableHead className="text-right font-semibold text-xs uppercase tracking-wider text-muted-foreground h-11">Start Odometer</TableHead>
-                        <TableHead className="text-right font-semibold text-xs uppercase tracking-wider text-muted-foreground h-11">End Odometer</TableHead>
-                        <TableHead className="text-right font-semibold text-xs uppercase tracking-wider text-muted-foreground h-11">Miles Driven</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {summary.daily_logs.map((log, i) => (
-                        <TableRow key={log.date} className="border-border/20 transition-colors hover:bg-muted/20 data-[state=selected]:bg-muted" data-testid={`row-log-${i}`}>
-                          <TableCell className="font-medium font-mono text-sm">{log.date}</TableCell>
-                          <TableCell className="text-right font-mono text-muted-foreground">{log.start_odometer_miles.toFixed(1)} <span className="text-xs text-muted-foreground/50">mi</span></TableCell>
-                          <TableCell className="text-right font-mono text-muted-foreground">{log.end_odometer_miles.toFixed(1)} <span className="text-xs text-muted-foreground/50">mi</span></TableCell>
-                          <TableCell className="text-right font-mono text-primary font-semibold">
-                            {log.miles_driven > 0 ? '+' : ''}{log.miles_driven.toFixed(1)} <span className="text-xs opacity-50">mi</span>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </CardContent>
-            {summary.daily_logs.length > 0 && (
-              <CardFooter className="bg-muted/20 border-t border-border/40 p-4 md:px-6 flex justify-between items-center print:border-t-2 print:border-black">
-                <span className="font-semibold text-sm uppercase tracking-wider text-muted-foreground">Period Total</span>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-2xl font-bold font-mono tracking-tight text-foreground" data-testid="text-total-miles">
-                    {summary.total_miles.toFixed(1)}
-                  </span>
-                  <span className="text-sm font-medium text-muted-foreground uppercase tracking-wide">miles</span>
-                </div>
-              </CardFooter>
-            )}
-          </Card>
-        )}
-      </main>
+                ))}
+              </div>
+              <div className="flex justify-end pt-1">
+                <span className="text-xs text-white/40 font-mono">
+                  Total: <span className="text-amber-400 font-semibold">{totalMiles.toFixed(1)} mi</span>
+                </span>
+              </div>
+            </div>
+
+            {/* Project + Team Leader */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs text-white/50 uppercase tracking-wider">Project Number</Label>
+                <Combobox
+                  value={form.projectNumber}
+                  onChange={v => setField("projectNumber", v)}
+                  options={projectOptions}
+                  placeholder="Select or add project…"
+                  allowNew
+                  onCreateNew={handleCreateProject}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-white/50 uppercase tracking-wider">Team Leader</Label>
+                <Combobox
+                  value={form.teamLeaderName}
+                  onChange={v => setField("teamLeaderName", v)}
+                  options={leaderOptions}
+                  placeholder="Select or add leader…"
+                  allowNew
+                  onCreateNew={handleCreateLeader}
+                />
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="ghost"
+              onClick={() => { setShowAddDialog(false); setFetchOdo(false); setGpsLoaded(false); }}
+              disabled={saving}
+              className="text-white/50 hover:text-white hover:bg-white/10"
+            >
+              <X className="h-4 w-4 mr-1.5" />
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSave}
+              disabled={!canSave || saving}
+              className="bg-amber-500 hover:bg-amber-400 text-black font-semibold"
+            >
+              {saving ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Check className="h-4 w-4 mr-1.5" />}
+              Save Entry
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

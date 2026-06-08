@@ -12,13 +12,18 @@ tags:
     description: Health operations
   - name: gps
     description: GPS / One-Step GPS operations
+  - name: projects
+    description: Project management
+  - name: teamLeaders
+    description: Team leader management
+  - name: logEntries
+    description: Mileage log entry management
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -32,7 +37,6 @@ paths:
       operationId: getGpsDevices
       tags: [gps]
       summary: List GPS devices (trucks)
-      description: Returns all active GPS-tracked trucks from One-Step GPS
       responses:
         "200":
           description: List of devices
@@ -43,66 +47,27 @@ paths:
                 items:
                   $ref: "#/components/schemas/GpsDevice"
 
-  /gps/device-points:
-    get:
-      operationId: getDevicePoints
-      tags: [gps]
-      summary: Get GPS device points for a date range
-      description: Returns GPS data points with odometer readings for a given truck over a date range
-      parameters:
-        - name: device_id
-          in: query
-          required: true
-          schema:
-            type: string
-          description: Device ID of the truck
-        - name: from
-          in: query
-          required: true
-          schema:
-            type: string
-          description: ISO 8601 start datetime (e.g. 2024-01-01T00:00:00Z)
-        - name: to
-          in: query
-          required: true
-          schema:
-            type: string
-          description: ISO 8601 end datetime (e.g. 2024-01-31T23:59:59Z)
-      responses:
-        "200":
-          description: List of device points
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/DevicePoint"
-
   /gps/mileage-summary:
     get:
       operationId: getMileageSummary
       tags: [gps]
       summary: Get daily mileage summary for a truck
-      description: Computes daily mileage from odometer readings and returns a structured log
       parameters:
         - name: device_id
           in: query
           required: true
           schema:
             type: string
-          description: Device ID of the truck
         - name: from
           in: query
           required: true
           schema:
             type: string
-          description: ISO 8601 start date (e.g. 2024-01-01)
         - name: to
           in: query
           required: true
           schema:
             type: string
-          description: ISO 8601 end date (e.g. 2024-01-31)
       responses:
         "200":
           description: Daily mileage summary
@@ -110,6 +75,146 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/MileageSummary"
+
+  /gps/odometer-range:
+    get:
+      operationId: getOdometerRange
+      tags: [gps]
+      summary: Get first and last odometer reading for a truck over a date range
+      parameters:
+        - name: device_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Odometer range
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OdometerRange"
+
+  /projects:
+    get:
+      operationId: listProjects
+      tags: [projects]
+      summary: List all projects
+      responses:
+        "200":
+          description: List of projects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Project"
+    post:
+      operationId: createProject
+      tags: [projects]
+      summary: Create a new project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+
+  /team-leaders:
+    get:
+      operationId: listTeamLeaders
+      tags: [teamLeaders]
+      summary: List all team leaders
+      responses:
+        "200":
+          description: List of team leaders
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TeamLeader"
+    post:
+      operationId: createTeamLeader
+      tags: [teamLeaders]
+      summary: Create a new team leader
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TeamLeaderInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeamLeader"
+
+  /log-entries:
+    get:
+      operationId: listLogEntries
+      tags: [logEntries]
+      summary: List all mileage log entries
+      responses:
+        "200":
+          description: List of log entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LogEntry"
+    post:
+      operationId: createLogEntry
+      tags: [logEntries]
+      summary: Create a mileage log entry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LogEntryInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LogEntry"
+
+  /log-entries/{id}:
+    delete:
+      operationId: deleteLogEntry
+      tags: [logEntries]
+      summary: Delete a log entry
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
 
 components:
   schemas:
@@ -135,24 +240,28 @@ components:
         active_state:
           type: string
 
-    DevicePoint:
+    OdometerRange:
       type: object
       required:
-        - device_point_id
-        - dt_tracker
-        - lat
-        - lng
+        - device_id
+        - from
+        - to
+        - begin_odometer_miles
+        - end_odometer_miles
+        - total_miles
       properties:
-        device_point_id:
+        device_id:
           type: string
-        dt_tracker:
+        from:
           type: string
-        lat:
+        to:
+          type: string
+        begin_odometer_miles:
           type: number
-        lng:
+        end_odometer_miles:
           type: number
-        odometer_miles:
-          type: ["number", "null"]
+        total_miles:
+          type: number
 
     DailyMileage:
       type: object
@@ -164,7 +273,6 @@ components:
       properties:
         date:
           type: string
-          description: Calendar date YYYY-MM-DD
         start_odometer_miles:
           type: number
         end_odometer_miles:
@@ -196,3 +304,132 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/DailyMileage"
+
+    Project:
+      type: object
+      required:
+        - id
+        - project_number
+        - created_at
+      properties:
+        id:
+          type: integer
+        project_number:
+          type: string
+        created_at:
+          type: string
+
+    ProjectInput:
+      type: object
+      required:
+        - project_number
+      properties:
+        project_number:
+          type: string
+
+    TeamLeader:
+      type: object
+      required:
+        - id
+        - name
+        - created_at
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        created_at:
+          type: string
+
+    TeamLeaderInput:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+
+    LogEntry:
+      type: object
+      required:
+        - id
+        - device_id
+        - device_name
+        - start_date
+        - end_date
+        - begin_odometer
+        - end_odometer
+        - indirect_miles
+        - personal_miles
+        - direct_miles
+        - total_miles
+        - project_number
+        - team_leader_name
+        - created_at
+      properties:
+        id:
+          type: integer
+        device_id:
+          type: string
+        device_name:
+          type: string
+        start_date:
+          type: string
+        end_date:
+          type: string
+        begin_odometer:
+          type: number
+        end_odometer:
+          type: number
+        indirect_miles:
+          type: number
+        personal_miles:
+          type: number
+        direct_miles:
+          type: number
+        total_miles:
+          type: number
+        project_number:
+          type: string
+        team_leader_name:
+          type: string
+        created_at:
+          type: string
+
+    LogEntryInput:
+      type: object
+      required:
+        - device_id
+        - device_name
+        - start_date
+        - end_date
+        - begin_odometer
+        - end_odometer
+        - indirect_miles
+        - personal_miles
+        - direct_miles
+        - project_number
+        - team_leader_name
+      properties:
+        device_id:
+          type: string
+        device_name:
+          type: string
+        start_date:
+          type: string
+        end_date:
+          type: string
+        begin_odometer:
+          type: number
+        end_odometer:
+          type: number
+        indirect_miles:
+          type: number
+        personal_miles:
+          type: number
+        direct_miles:
+          type: number
+        project_number:
+          type: string
+        team_leader_name:
+          type: string

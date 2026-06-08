@@ -6,9 +6,11 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface DailyMileage {
-  date: string;
-  start_odometer_miles: number;
+export interface OdometerRange {
+  device_id: string;
+  from: string;
+  to: string;
+  begin_odometer_miles: number;
   end_odometer_miles: number;
-  miles_driven: number;
+  total_miles: number;
 }

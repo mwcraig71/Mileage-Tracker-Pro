@@ -9,7 +9,6 @@ import * as zod from 'zod';
 
 
 /**
- * Returns server health status
  * @summary Health check
  */
 export const HealthCheckResponse = zod.object({
@@ -18,7 +17,6 @@ export const HealthCheckResponse = zod.object({
 
 
 /**
- * Returns all active GPS-tracked trucks from One-Step GPS
  * @summary List GPS devices (trucks)
  */
 export const GetGpsDevicesResponseItem = zod.object({
@@ -30,33 +28,12 @@ export const GetGpsDevicesResponse = zod.array(GetGpsDevicesResponseItem)
 
 
 /**
- * Returns GPS data points with odometer readings for a given truck over a date range
- * @summary Get GPS device points for a date range
- */
-export const GetDevicePointsQueryParams = zod.object({
-  "device_id": zod.coerce.string().describe('Device ID of the truck'),
-  "from": zod.coerce.string().describe('ISO 8601 start datetime (e.g. 2024-01-01T00:00:00Z)'),
-  "to": zod.coerce.string().describe('ISO 8601 end datetime (e.g. 2024-01-31T23:59:59Z)')
-})
-
-export const GetDevicePointsResponseItem = zod.object({
-  "device_point_id": zod.string(),
-  "dt_tracker": zod.string(),
-  "lat": zod.number(),
-  "lng": zod.number(),
-  "odometer_miles": zod.number().nullish()
-})
-export const GetDevicePointsResponse = zod.array(GetDevicePointsResponseItem)
-
-
-/**
- * Computes daily mileage from odometer readings and returns a structured log
  * @summary Get daily mileage summary for a truck
  */
 export const GetMileageSummaryQueryParams = zod.object({
-  "device_id": zod.coerce.string().describe('Device ID of the truck'),
-  "from": zod.coerce.string().describe('ISO 8601 start date (e.g. 2024-01-01)'),
-  "to": zod.coerce.string().describe('ISO 8601 end date (e.g. 2024-01-31)')
+  "device_id": zod.coerce.string(),
+  "from": zod.coerce.string(),
+  "to": zod.coerce.string()
 })
 
 export const GetMileageSummaryResponse = zod.object({
@@ -66,11 +43,116 @@ export const GetMileageSummaryResponse = zod.object({
   "to": zod.string(),
   "total_miles": zod.number(),
   "daily_logs": zod.array(zod.object({
-  "date": zod.string().describe('Calendar date YYYY-MM-DD'),
+  "date": zod.string(),
   "start_odometer_miles": zod.number(),
   "end_odometer_miles": zod.number(),
   "miles_driven": zod.number()
 }))
+})
+
+
+/**
+ * @summary Get first and last odometer reading for a truck over a date range
+ */
+export const GetOdometerRangeQueryParams = zod.object({
+  "device_id": zod.coerce.string(),
+  "from": zod.coerce.string(),
+  "to": zod.coerce.string()
+})
+
+export const GetOdometerRangeResponse = zod.object({
+  "device_id": zod.string(),
+  "from": zod.string(),
+  "to": zod.string(),
+  "begin_odometer_miles": zod.number(),
+  "end_odometer_miles": zod.number(),
+  "total_miles": zod.number()
+})
+
+
+/**
+ * @summary List all projects
+ */
+export const ListProjectsResponseItem = zod.object({
+  "id": zod.number(),
+  "project_number": zod.string(),
+  "created_at": zod.string()
+})
+export const ListProjectsResponse = zod.array(ListProjectsResponseItem)
+
+
+/**
+ * @summary Create a new project
+ */
+export const CreateProjectBody = zod.object({
+  "project_number": zod.string()
+})
+
+
+/**
+ * @summary List all team leaders
+ */
+export const ListTeamLeadersResponseItem = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "created_at": zod.string()
+})
+export const ListTeamLeadersResponse = zod.array(ListTeamLeadersResponseItem)
+
+
+/**
+ * @summary Create a new team leader
+ */
+export const CreateTeamLeaderBody = zod.object({
+  "name": zod.string()
+})
+
+
+/**
+ * @summary List all mileage log entries
+ */
+export const ListLogEntriesResponseItem = zod.object({
+  "id": zod.number(),
+  "device_id": zod.string(),
+  "device_name": zod.string(),
+  "start_date": zod.string(),
+  "end_date": zod.string(),
+  "begin_odometer": zod.number(),
+  "end_odometer": zod.number(),
+  "indirect_miles": zod.number(),
+  "personal_miles": zod.number(),
+  "direct_miles": zod.number(),
+  "total_miles": zod.number(),
+  "project_number": zod.string(),
+  "team_leader_name": zod.string(),
+  "created_at": zod.string()
+})
+export const ListLogEntriesResponse = zod.array(ListLogEntriesResponseItem)
+
+
+/**
+ * @summary Create a mileage log entry
+ */
+export const CreateLogEntryBody = zod.object({
+  "device_id": zod.string(),
+  "device_name": zod.string(),
+  "start_date": zod.string(),
+  "end_date": zod.string(),
+  "begin_odometer": zod.number(),
+  "end_odometer": zod.number(),
+  "indirect_miles": zod.number(),
+  "personal_miles": zod.number(),
+  "direct_miles": zod.number(),
+  "project_number": zod.string(),
+  "team_leader_name": zod.string()
+})
+
+
+/**
+ * @summary Delete a log entry
+ */
+export const DeleteLogEntryParams = zod.object({
+  "id": zod.coerce.number()
 })
 
 

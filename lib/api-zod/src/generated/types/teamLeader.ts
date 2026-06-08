@@ -6,8 +6,8 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type GetMileageSummaryParams = {
-device_id: string;
-from: string;
-to: string;
-};
+export interface TeamLeader {
+  id: number;
+  name: string;
+  created_at: string;
+}

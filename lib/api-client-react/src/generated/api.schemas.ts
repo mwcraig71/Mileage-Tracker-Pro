@@ -15,17 +15,16 @@ export interface GpsDevice {
   active_state: string;
 }
 
-export interface DevicePoint {
-  device_point_id: string;
-  dt_tracker: string;
-  lat: number;
-  lng: number;
-  /** @nullable */
-  odometer_miles?: number | null;
+export interface OdometerRange {
+  device_id: string;
+  from: string;
+  to: string;
+  begin_odometer_miles: number;
+  end_odometer_miles: number;
+  total_miles: number;
 }
 
 export interface DailyMileage {
-  /** Calendar date YYYY-MM-DD */
   date: string;
   start_odometer_miles: number;
   end_odometer_miles: number;
@@ -41,33 +40,66 @@ export interface MileageSummary {
   daily_logs: DailyMileage[];
 }
 
-export type GetDevicePointsParams = {
-/**
- * Device ID of the truck
- */
+export interface Project {
+  id: number;
+  project_number: string;
+  created_at: string;
+}
+
+export interface ProjectInput {
+  project_number: string;
+}
+
+export interface TeamLeader {
+  id: number;
+  name: string;
+  created_at: string;
+}
+
+export interface TeamLeaderInput {
+  name: string;
+}
+
+export interface LogEntry {
+  id: number;
+  device_id: string;
+  device_name: string;
+  start_date: string;
+  end_date: string;
+  begin_odometer: number;
+  end_odometer: number;
+  indirect_miles: number;
+  personal_miles: number;
+  direct_miles: number;
+  total_miles: number;
+  project_number: string;
+  team_leader_name: string;
+  created_at: string;
+}
+
+export interface LogEntryInput {
+  device_id: string;
+  device_name: string;
+  start_date: string;
+  end_date: string;
+  begin_odometer: number;
+  end_odometer: number;
+  indirect_miles: number;
+  personal_miles: number;
+  direct_miles: number;
+  project_number: string;
+  team_leader_name: string;
+}
+
+export type GetMileageSummaryParams = {
 device_id: string;
-/**
- * ISO 8601 start datetime (e.g. 2024-01-01T00:00:00Z)
- */
 from: string;
-/**
- * ISO 8601 end datetime (e.g. 2024-01-31T23:59:59Z)
- */
 to: string;
 };
 
-export type GetMileageSummaryParams = {
-/**
- * Device ID of the truck
- */
+export type GetOdometerRangeParams = {
 device_id: string;
-/**
- * ISO 8601 start date (e.g. 2024-01-01)
- */
 from: string;
-/**
- * ISO 8601 end date (e.g. 2024-01-31)
- */
 to: string;
 };
 

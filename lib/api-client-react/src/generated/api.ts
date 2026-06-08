@@ -6,26 +6,36 @@
  * OpenAPI spec version: 0.1.0
  */
 import {
+  useMutation,
   useQuery
 } from '@tanstack/react-query';
 import type {
+  MutationFunction,
   QueryFunction,
   QueryKey,
+  UseMutationOptions,
+  UseMutationResult,
   UseQueryOptions,
   UseQueryResult
 } from '@tanstack/react-query';
 
 import type {
-  DevicePoint,
-  GetDevicePointsParams,
   GetMileageSummaryParams,
+  GetOdometerRangeParams,
   GpsDevice,
   HealthStatus,
-  MileageSummary
+  LogEntry,
+  LogEntryInput,
+  MileageSummary,
+  OdometerRange,
+  Project,
+  ProjectInput,
+  TeamLeader,
+  TeamLeaderInput
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
-import type { ErrorType } from '../custom-fetch';
+import type { ErrorType , BodyType } from '../custom-fetch';
 
 type AwaitedInput<T> = PromiseLike<T> | T;
 
@@ -45,7 +55,6 @@ export const getHealthCheckUrl = () => {
 }
 
 /**
- * Returns server health status
  * @summary Health check
  */
 export const healthCheck = async ( options?: RequestInit): Promise<HealthStatus> => {
@@ -123,7 +132,6 @@ export const getGetGpsDevicesUrl = () => {
 }
 
 /**
- * Returns all active GPS-tracked trucks from One-Step GPS
  * @summary List GPS devices (trucks)
  */
 export const getGpsDevices = async ( options?: RequestInit): Promise<GpsDevice[]> => {
@@ -192,91 +200,6 @@ export function useGetGpsDevices<TData = Awaited<ReturnType<typeof getGpsDevices
 
 
 
-export const getGetDevicePointsUrl = (params: GetDevicePointsParams,) => {
-  const normalizedParams = new URLSearchParams();
-
-  Object.entries(params || {}).forEach(([key, value]) => {
-
-    if (value !== undefined) {
-      normalizedParams.append(key, value === null ? 'null' : value.toString())
-    }
-  });
-
-  const stringifiedParams = normalizedParams.toString();
-
-  return stringifiedParams.length > 0 ? `/api/gps/device-points?${stringifiedParams}` : `/api/gps/device-points`
-}
-
-/**
- * Returns GPS data points with odometer readings for a given truck over a date range
- * @summary Get GPS device points for a date range
- */
-export const getDevicePoints = async (params: GetDevicePointsParams, options?: RequestInit): Promise<DevicePoint[]> => {
-
-  return customFetch<DevicePoint[]>(getGetDevicePointsUrl(params),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-
-
-export const getGetDevicePointsQueryKey = (params?: GetDevicePointsParams,) => {
-    return [
-    `/api/gps/device-points`, ...(params ? [params] : [])
-    ] as const;
-    }
-
-
-export const getGetDevicePointsQueryOptions = <TData = Awaited<ReturnType<typeof getDevicePoints>>, TError = ErrorType<unknown>>(params: GetDevicePointsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDevicePoints>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getGetDevicePointsQueryKey(params);
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getDevicePoints>>> = ({ signal }) => getDevicePoints(params, { signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getDevicePoints>>, TError, TData> & { queryKey: QueryKey }
-}
-
-export type GetDevicePointsQueryResult = NonNullable<Awaited<ReturnType<typeof getDevicePoints>>>
-export type GetDevicePointsQueryError = ErrorType<unknown>
-
-
-/**
- * @summary Get GPS device points for a date range
- */
-
-export function useGetDevicePoints<TData = Awaited<ReturnType<typeof getDevicePoints>>, TError = ErrorType<unknown>>(
- params: GetDevicePointsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDevicePoints>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
-
- ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-
-  const queryOptions = getGetDevicePointsQueryOptions(params,options)
-
-  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
-
-  return { ...query, queryKey: queryOptions.queryKey };
-}
-
-
-
-
-
-
-
 export const getGetMileageSummaryUrl = (params: GetMileageSummaryParams,) => {
   const normalizedParams = new URLSearchParams();
 
@@ -293,7 +216,6 @@ export const getGetMileageSummaryUrl = (params: GetMileageSummaryParams,) => {
 }
 
 /**
- * Computes daily mileage from odometer readings and returns a structured log
  * @summary Get daily mileage summary for a truck
  */
 export const getMileageSummary = async (params: GetMileageSummaryParams, options?: RequestInit): Promise<MileageSummary> => {
@@ -361,4 +283,602 @@ export function useGetMileageSummary<TData = Awaited<ReturnType<typeof getMileag
 
 
 
+
+export const getGetOdometerRangeUrl = (params: GetOdometerRangeParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/gps/odometer-range?${stringifiedParams}` : `/api/gps/odometer-range`
+}
+
+/**
+ * @summary Get first and last odometer reading for a truck over a date range
+ */
+export const getOdometerRange = async (params: GetOdometerRangeParams, options?: RequestInit): Promise<OdometerRange> => {
+
+  return customFetch<OdometerRange>(getGetOdometerRangeUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetOdometerRangeQueryKey = (params?: GetOdometerRangeParams,) => {
+    return [
+    `/api/gps/odometer-range`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetOdometerRangeQueryOptions = <TData = Awaited<ReturnType<typeof getOdometerRange>>, TError = ErrorType<unknown>>(params: GetOdometerRangeParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOdometerRange>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetOdometerRangeQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getOdometerRange>>> = ({ signal }) => getOdometerRange(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getOdometerRange>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetOdometerRangeQueryResult = NonNullable<Awaited<ReturnType<typeof getOdometerRange>>>
+export type GetOdometerRangeQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get first and last odometer reading for a truck over a date range
+ */
+
+export function useGetOdometerRange<TData = Awaited<ReturnType<typeof getOdometerRange>>, TError = ErrorType<unknown>>(
+ params: GetOdometerRangeParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getOdometerRange>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetOdometerRangeQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getListProjectsUrl = () => {
+
+
+
+
+  return `/api/projects`
+}
+
+/**
+ * @summary List all projects
+ */
+export const listProjects = async ( options?: RequestInit): Promise<Project[]> => {
+
+  return customFetch<Project[]>(getListProjectsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListProjectsQueryKey = () => {
+    return [
+    `/api/projects`
+    ] as const;
+    }
+
+
+export const getListProjectsQueryOptions = <TData = Awaited<ReturnType<typeof listProjects>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listProjects>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListProjectsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listProjects>>> = ({ signal }) => listProjects({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listProjects>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListProjectsQueryResult = NonNullable<Awaited<ReturnType<typeof listProjects>>>
+export type ListProjectsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List all projects
+ */
+
+export function useListProjects<TData = Awaited<ReturnType<typeof listProjects>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listProjects>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListProjectsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCreateProjectUrl = () => {
+
+
+
+
+  return `/api/projects`
+}
+
+/**
+ * @summary Create a new project
+ */
+export const createProject = async (projectInput: ProjectInput, options?: RequestInit): Promise<Project> => {
+
+  return customFetch<Project>(getCreateProjectUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      projectInput,)
+  }
+);}
+
+
+
+
+export const getCreateProjectMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createProject>>, TError,{data: BodyType<ProjectInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createProject>>, TError,{data: BodyType<ProjectInput>}, TContext> => {
+
+const mutationKey = ['createProject'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createProject>>, {data: BodyType<ProjectInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createProject(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateProjectMutationResult = NonNullable<Awaited<ReturnType<typeof createProject>>>
+    export type CreateProjectMutationBody = BodyType<ProjectInput>
+    export type CreateProjectMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Create a new project
+ */
+export const useCreateProject = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createProject>>, TError,{data: BodyType<ProjectInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createProject>>,
+        TError,
+        {data: BodyType<ProjectInput>},
+        TContext
+      > => {
+      return useMutation(getCreateProjectMutationOptions(options));
+    }
+
+export const getListTeamLeadersUrl = () => {
+
+
+
+
+  return `/api/team-leaders`
+}
+
+/**
+ * @summary List all team leaders
+ */
+export const listTeamLeaders = async ( options?: RequestInit): Promise<TeamLeader[]> => {
+
+  return customFetch<TeamLeader[]>(getListTeamLeadersUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListTeamLeadersQueryKey = () => {
+    return [
+    `/api/team-leaders`
+    ] as const;
+    }
+
+
+export const getListTeamLeadersQueryOptions = <TData = Awaited<ReturnType<typeof listTeamLeaders>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listTeamLeaders>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListTeamLeadersQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listTeamLeaders>>> = ({ signal }) => listTeamLeaders({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listTeamLeaders>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListTeamLeadersQueryResult = NonNullable<Awaited<ReturnType<typeof listTeamLeaders>>>
+export type ListTeamLeadersQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List all team leaders
+ */
+
+export function useListTeamLeaders<TData = Awaited<ReturnType<typeof listTeamLeaders>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listTeamLeaders>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListTeamLeadersQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCreateTeamLeaderUrl = () => {
+
+
+
+
+  return `/api/team-leaders`
+}
+
+/**
+ * @summary Create a new team leader
+ */
+export const createTeamLeader = async (teamLeaderInput: TeamLeaderInput, options?: RequestInit): Promise<TeamLeader> => {
+
+  return customFetch<TeamLeader>(getCreateTeamLeaderUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      teamLeaderInput,)
+  }
+);}
+
+
+
+
+export const getCreateTeamLeaderMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createTeamLeader>>, TError,{data: BodyType<TeamLeaderInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createTeamLeader>>, TError,{data: BodyType<TeamLeaderInput>}, TContext> => {
+
+const mutationKey = ['createTeamLeader'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createTeamLeader>>, {data: BodyType<TeamLeaderInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createTeamLeader(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateTeamLeaderMutationResult = NonNullable<Awaited<ReturnType<typeof createTeamLeader>>>
+    export type CreateTeamLeaderMutationBody = BodyType<TeamLeaderInput>
+    export type CreateTeamLeaderMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Create a new team leader
+ */
+export const useCreateTeamLeader = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createTeamLeader>>, TError,{data: BodyType<TeamLeaderInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createTeamLeader>>,
+        TError,
+        {data: BodyType<TeamLeaderInput>},
+        TContext
+      > => {
+      return useMutation(getCreateTeamLeaderMutationOptions(options));
+    }
+
+export const getListLogEntriesUrl = () => {
+
+
+
+
+  return `/api/log-entries`
+}
+
+/**
+ * @summary List all mileage log entries
+ */
+export const listLogEntries = async ( options?: RequestInit): Promise<LogEntry[]> => {
+
+  return customFetch<LogEntry[]>(getListLogEntriesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListLogEntriesQueryKey = () => {
+    return [
+    `/api/log-entries`
+    ] as const;
+    }
+
+
+export const getListLogEntriesQueryOptions = <TData = Awaited<ReturnType<typeof listLogEntries>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listLogEntries>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListLogEntriesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listLogEntries>>> = ({ signal }) => listLogEntries({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listLogEntries>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListLogEntriesQueryResult = NonNullable<Awaited<ReturnType<typeof listLogEntries>>>
+export type ListLogEntriesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List all mileage log entries
+ */
+
+export function useListLogEntries<TData = Awaited<ReturnType<typeof listLogEntries>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listLogEntries>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListLogEntriesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCreateLogEntryUrl = () => {
+
+
+
+
+  return `/api/log-entries`
+}
+
+/**
+ * @summary Create a mileage log entry
+ */
+export const createLogEntry = async (logEntryInput: LogEntryInput, options?: RequestInit): Promise<LogEntry> => {
+
+  return customFetch<LogEntry>(getCreateLogEntryUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      logEntryInput,)
+  }
+);}
+
+
+
+
+export const getCreateLogEntryMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createLogEntry>>, TError,{data: BodyType<LogEntryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createLogEntry>>, TError,{data: BodyType<LogEntryInput>}, TContext> => {
+
+const mutationKey = ['createLogEntry'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createLogEntry>>, {data: BodyType<LogEntryInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createLogEntry(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateLogEntryMutationResult = NonNullable<Awaited<ReturnType<typeof createLogEntry>>>
+    export type CreateLogEntryMutationBody = BodyType<LogEntryInput>
+    export type CreateLogEntryMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Create a mileage log entry
+ */
+export const useCreateLogEntry = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createLogEntry>>, TError,{data: BodyType<LogEntryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createLogEntry>>,
+        TError,
+        {data: BodyType<LogEntryInput>},
+        TContext
+      > => {
+      return useMutation(getCreateLogEntryMutationOptions(options));
+    }
+
+export const getDeleteLogEntryUrl = (id: number,) => {
+
+
+
+
+  return `/api/log-entries/${id}`
+}
+
+/**
+ * @summary Delete a log entry
+ */
+export const deleteLogEntry = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteLogEntryUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteLogEntryMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteLogEntry>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteLogEntry>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteLogEntry'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteLogEntry>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteLogEntry(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteLogEntryMutationResult = NonNullable<Awaited<ReturnType<typeof deleteLogEntry>>>
+
+    export type DeleteLogEntryMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Delete a log entry
+ */
+export const useDeleteLogEntry = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteLogEntry>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteLogEntry>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteLogEntryMutationOptions(options));
+    }
 
