@@ -167,6 +167,44 @@ export interface DriverSessionInput {
   shift_date?: string;
 }
 
+export interface GpsCacheEntry {
+  device_id: string;
+  device_name: string;
+  date: string;
+  begin_odometer: number;
+  end_odometer: number;
+  gps_miles: number;
+  fetched_at?: string | null;
+}
+
+export interface GpsCacheSyncInput {
+  device_ids: string[];
+  from: string;
+  to: string;
+  force?: boolean;
+}
+
+export interface GpsCacheSyncResult {
+  synced: string[];
+  skipped: string[];
+}
+
+export interface ReportRow {
+  device_id: string;
+  device_name: string;
+  date: string;
+  begin_odometer?: number | null;
+  end_odometer?: number | null;
+  gps_miles?: number | null;
+  indirect_miles: number;
+  personal_miles: number;
+  direct_miles: number;
+  project_number: string;
+  team_leader_name: string;
+  is_exported: boolean;
+  split_index: number;
+}
+
 export type GetMileageSummaryParams = {
 device_id: string;
 from: string;
@@ -177,6 +215,20 @@ export type GetOdometerRangeParams = {
 device_id: string;
 from: string;
 to: string;
+};
+
+export type GetGpsCacheParams = {
+from: string;
+to: string;
+'device_ids[]'?: string[];
+};
+
+export type GetReportsParams = {
+from: string;
+to: string;
+'device_ids[]'?: string[];
+project?: string;
+leader?: string;
 };
 
 export type ListDriverSessionsParams = {

@@ -1,5 +1,7 @@
 import { Router } from "express";
+import { Pool } from "pg";
 
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const router = Router();
 
 const BASE_URL = "https://track.onestepgps.com/v3/api/public";
@@ -141,6 +143,136 @@ router.get("/mileage-summary", async (req, res) => {
       total_miles,
       daily_logs,
     });
+  } catch (err) {
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// POST /gps/cache/sync — fetch from One-Step GPS API and persist in gps_cache
+router.post("/cache/sync", async (req, res) => {
+  const { device_ids, from, to, force = false } = req.body as {
+    device_ids: string[];
+    from: string;
+    to: string;
+    force?: boolean;
+  };
+
+  if (!Array.isArray(device_ids) || !device_ids.length || !from || !to) {
+    res.status(400).json({ error: "device_ids, from, and to are required" });
+    return;
+  }
+
+  try {
+    const apiKey = getApiKey();
+
+    // Fetch device display names once for the whole batch
+    const devResponse = await fetch(`${BASE_URL}/device?api-key=${apiKey}`);
+    const devData = await devResponse.json() as { result_list: unknown[] };
+    const deviceMap = new Map<string, string>(
+      (devData.result_list as any[]).map(d => [d.device_id, d.display_name ?? d.device_id]),
+    );
+
+    const synced: string[] = [];
+    const skipped: string[] = [];
+
+    for (const device_id of device_ids) {
+      if (!force) {
+        const existing = await pool.query(
+          `SELECT COUNT(*) AS cnt FROM gps_cache WHERE device_id = $1 AND date >= $2 AND date <= $3`,
+          [device_id, from, to],
+        );
+        if (parseInt(existing.rows[0].cnt) > 0) {
+          skipped.push(device_id);
+          continue;
+        }
+      }
+
+      const displayName = deviceMap.get(device_id) ?? device_id;
+      const dtFrom = new Date(from);
+      dtFrom.setHours(0, 0, 0, 0);
+      const dtTo = new Date(to);
+      dtTo.setHours(23, 59, 59, 999);
+
+      const url = `${BASE_URL}/device-point?api-key=${apiKey}&device_id=${device_id}&dt_server_from=${dtFrom.toISOString()}&dt_server_to=${dtTo.toISOString()}&limit=5000`;
+      const ptResponse = await fetch(url);
+      if (!ptResponse.ok) continue;
+
+      const ptData = await ptResponse.json() as { result_list: unknown[] };
+      const sortedPoints = ((ptData.result_list || []) as any[])
+        .slice()
+        .sort((a, b) => (a.dt_tracker || "").localeCompare(b.dt_tracker || ""));
+
+      const byDate: Record<string, { first: number; last: number }> = {};
+      for (const p of sortedPoints) {
+        const odoMeters = p.device_point_detail?.vbus_odometer?.value;
+        if (odoMeters == null || odoMeters === 0) continue;
+        const date = (p.dt_tracker || "").substring(0, 10);
+        if (!date) continue;
+        if (!byDate[date]) byDate[date] = { first: odoMeters, last: odoMeters };
+        else byDate[date].last = odoMeters;
+      }
+
+      for (const [date, { first, last }] of Object.entries(byDate)) {
+        await pool.query(
+          `INSERT INTO gps_cache (device_id, device_name, date, begin_odometer, end_odometer, gps_miles)
+           VALUES ($1, $2, $3, $4, $5, $6)
+           ON CONFLICT (device_id, date) DO UPDATE SET
+             device_name    = EXCLUDED.device_name,
+             begin_odometer = EXCLUDED.begin_odometer,
+             end_odometer   = EXCLUDED.end_odometer,
+             gps_miles      = EXCLUDED.gps_miles,
+             fetched_at     = NOW()`,
+          [device_id, displayName, date, metersToMiles(first), metersToMiles(last),
+           Math.max(0, metersToMiles(last - first))],
+        );
+      }
+      synced.push(device_id);
+    }
+
+    res.json({ synced, skipped });
+  } catch (err) {
+    console.error("GPS cache sync error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// GET /gps/cache — query persisted GPS data
+router.get("/cache", async (req, res) => {
+  try {
+    const { from, to } = req.query as { from?: string; to?: string };
+    if (!from || !to) {
+      res.status(400).json({ error: "from and to are required" });
+      return;
+    }
+
+    const rawIds = req.query["device_ids[]"] ?? req.query["device_ids"];
+    const device_ids = rawIds ? [rawIds].flat().filter(Boolean) as string[] : [];
+
+    const params: unknown[] = [from, to];
+    let deviceFilter = "";
+    if (device_ids.length > 0) {
+      params.push(device_ids);
+      deviceFilter = `AND device_id = ANY($${params.length}::text[])`;
+    }
+
+    const result = await pool.query(
+      `SELECT device_id, device_name, date::TEXT AS date,
+              begin_odometer, end_odometer, gps_miles, fetched_at
+       FROM gps_cache
+       WHERE date >= $1 AND date <= $2 ${deviceFilter}
+       ORDER BY date, device_name`,
+      params,
+    );
+
+    res.json(result.rows.map(r => ({
+      device_id:      r.device_id,
+      device_name:    r.device_name,
+      date:           r.date,
+      begin_odometer: parseFloat(r.begin_odometer),
+      end_odometer:   parseFloat(r.end_odometer),
+      gps_miles:      parseFloat(r.gps_miles),
+      fetched_at:     r.fetched_at,
+    })));
   } catch (err) {
     res.status(500).json({ error: "Internal server error" });
   }

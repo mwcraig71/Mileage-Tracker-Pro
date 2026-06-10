@@ -26,8 +26,13 @@ import type {
   DriverSession,
   DriverSessionInput,
   ErrorResponse,
+  GetGpsCacheParams,
   GetMileageSummaryParams,
   GetOdometerRangeParams,
+  GetReportsParams,
+  GpsCacheEntry,
+  GpsCacheSyncInput,
+  GpsCacheSyncResult,
   GpsDevice,
   HealthStatus,
   ListDriverSessionsParams,
@@ -42,6 +47,7 @@ import type {
   PeriodInput,
   Project,
   ProjectInput,
+  ReportRow,
   TeamLeader,
   TeamLeaderInput
 } from './api.schemas';
@@ -368,6 +374,261 @@ export function useGetOdometerRange<TData = Awaited<ReturnType<typeof getOdomete
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetOdometerRangeQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getSyncGpsCacheUrl = () => {
+
+
+
+
+  return `/api/gps/cache/sync`
+}
+
+/**
+ * @summary Fetch GPS data from One-Step GPS API and persist in database cache
+ */
+export const syncGpsCache = async (gpsCacheSyncInput: GpsCacheSyncInput, options?: RequestInit): Promise<GpsCacheSyncResult> => {
+
+  return customFetch<GpsCacheSyncResult>(getSyncGpsCacheUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      gpsCacheSyncInput,)
+  }
+);}
+
+
+
+
+export const getSyncGpsCacheMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof syncGpsCache>>, TError,{data: BodyType<GpsCacheSyncInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof syncGpsCache>>, TError,{data: BodyType<GpsCacheSyncInput>}, TContext> => {
+
+const mutationKey = ['syncGpsCache'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof syncGpsCache>>, {data: BodyType<GpsCacheSyncInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  syncGpsCache(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SyncGpsCacheMutationResult = NonNullable<Awaited<ReturnType<typeof syncGpsCache>>>
+    export type SyncGpsCacheMutationBody = BodyType<GpsCacheSyncInput>
+    export type SyncGpsCacheMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Fetch GPS data from One-Step GPS API and persist in database cache
+ */
+export const useSyncGpsCache = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof syncGpsCache>>, TError,{data: BodyType<GpsCacheSyncInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof syncGpsCache>>,
+        TError,
+        {data: BodyType<GpsCacheSyncInput>},
+        TContext
+      > => {
+      return useMutation(getSyncGpsCacheMutationOptions(options));
+    }
+
+export const getGetGpsCacheUrl = (params: GetGpsCacheParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    const explodeParameters = ["device_ids[]"];
+
+    if (Array.isArray(value) && explodeParameters.includes(key)) {
+      value.forEach((v) => {
+        normalizedParams.append(key, v === null ? 'null' : v.toString());
+      });
+      return;
+    }
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/gps/cache?${stringifiedParams}` : `/api/gps/cache`
+}
+
+/**
+ * @summary Query cached GPS data from database
+ */
+export const getGpsCache = async (params: GetGpsCacheParams, options?: RequestInit): Promise<GpsCacheEntry[]> => {
+
+  return customFetch<GpsCacheEntry[]>(getGetGpsCacheUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetGpsCacheQueryKey = (params?: GetGpsCacheParams,) => {
+    return [
+    `/api/gps/cache`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetGpsCacheQueryOptions = <TData = Awaited<ReturnType<typeof getGpsCache>>, TError = ErrorType<unknown>>(params: GetGpsCacheParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getGpsCache>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetGpsCacheQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getGpsCache>>> = ({ signal }) => getGpsCache(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getGpsCache>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetGpsCacheQueryResult = NonNullable<Awaited<ReturnType<typeof getGpsCache>>>
+export type GetGpsCacheQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Query cached GPS data from database
+ */
+
+export function useGetGpsCache<TData = Awaited<ReturnType<typeof getGpsCache>>, TError = ErrorType<unknown>>(
+ params: GetGpsCacheParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getGpsCache>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetGpsCacheQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetReportsUrl = (params: GetReportsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    const explodeParameters = ["device_ids[]"];
+
+    if (Array.isArray(value) && explodeParameters.includes(key)) {
+      value.forEach((v) => {
+        normalizedParams.append(key, v === null ? 'null' : v.toString());
+      });
+      return;
+    }
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/reports?${stringifiedParams}` : `/api/reports`
+}
+
+/**
+ * @summary Combined report — GPS cache joined with annotations, filterable
+ */
+export const getReports = async (params: GetReportsParams, options?: RequestInit): Promise<ReportRow[]> => {
+
+  return customFetch<ReportRow[]>(getGetReportsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetReportsQueryKey = (params?: GetReportsParams,) => {
+    return [
+    `/api/reports`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetReportsQueryOptions = <TData = Awaited<ReturnType<typeof getReports>>, TError = ErrorType<unknown>>(params: GetReportsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getReports>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetReportsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getReports>>> = ({ signal }) => getReports(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getReports>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetReportsQueryResult = NonNullable<Awaited<ReturnType<typeof getReports>>>
+export type GetReportsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Combined report — GPS cache joined with annotations, filterable
+ */
+
+export function useGetReports<TData = Awaited<ReturnType<typeof getReports>>, TError = ErrorType<unknown>>(
+ params: GetReportsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getReports>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetReportsQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

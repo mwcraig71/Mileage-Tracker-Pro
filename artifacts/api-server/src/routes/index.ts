@@ -8,6 +8,7 @@ import periodsRouter from "./periods";
 import annotationsRouter from "./annotations";
 import configRouter from "./config";
 import driverSessionsRouter from "./driverSessions";
+import reportsRouter from "./reports";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use("/periods", periodsRouter);
 router.use("/annotations", annotationsRouter);
 router.use("/config", configRouter);
 router.use("/driver-sessions", driverSessionsRouter);
+router.use("/reports", reportsRouter);
 
 export default router;

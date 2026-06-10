@@ -3,8 +3,9 @@ import { format, startOfMonth, endOfMonth, subMonths } from "date-fns";
 import {
   Truck, Filter, Printer, Download, Loader2, ChevronDown, Check, ChevronsUpDown,
   Plus, Save, CheckCircle2, Lock, Unlock, ChevronUp, ArrowUpDown, Archive,
-  Clock, AlertTriangle, X, User, Scissors,
+  Clock, AlertTriangle, X, User, Scissors, BarChart2,
 } from "lucide-react";
+import { Link } from "wouter";
 import { useQuery, useQueries, useQueryClient } from "@tanstack/react-query";
 import {
   getGetMileageSummaryQueryOptions,
@@ -23,6 +24,7 @@ import {
   useUpdateAnnotation,
   useVerifyManagerPassword,
   useDeleteAnnotation,
+  useSyncGpsCache,
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -234,6 +236,7 @@ export default function Home() {
   const updateAnnotationM  = useUpdateAnnotation();
   const deleteAnnotationM  = useDeleteAnnotation();
   const verifyPasswordM    = useVerifyManagerPassword();
+  const syncGpsCacheMut    = useSyncGpsCache();
 
   const { data: periodAnnotations } = useQuery({
     ...getListPeriodAnnotationsQueryOptions(activePeriodId ?? 0),
@@ -605,6 +608,8 @@ export default function Home() {
       setSubmitted(false);
       setTimeout(() => setSubmitted(true), 0);
       qc.invalidateQueries({ queryKey: ["/api/periods"] });
+      // Background: cache GPS data in DB so Reports can query it later
+      syncGpsCacheMut.mutate({ data: { device_ids: selectedIds, from: dateFrom, to: dateTo } });
     } finally {
       setIsGenerating(false);
     }
@@ -1131,6 +1136,13 @@ export default function Home() {
 
           {/* Actions */}
           <div className="flex items-center gap-1.5 shrink-0">
+            {/* Reports link */}
+            <Link to="/reports"
+              className="flex items-center gap-1 h-8 px-2 text-xs text-white/50 hover:text-white hover:bg-white/10 rounded-md transition-colors">
+              <BarChart2 className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Reports</span>
+            </Link>
+
             {/* Period selector */}
             <Popover open={periodSelectorOpen} onOpenChange={setPeriodSelectorOpen}>
               <PopoverTrigger asChild>

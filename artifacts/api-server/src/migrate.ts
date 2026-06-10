@@ -164,6 +164,25 @@ export async function runMigrations(): Promise<void> {
         ON driver_sessions (device_id, started_at)
     `);
 
+    // ── GPS cache table ───────────────────────────────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS gps_cache (
+        id              SERIAL PRIMARY KEY,
+        device_id       TEXT NOT NULL,
+        device_name     TEXT NOT NULL,
+        date            DATE NOT NULL,
+        begin_odometer  NUMERIC(12,1) NOT NULL DEFAULT 0,
+        end_odometer    NUMERIC(12,1) NOT NULL DEFAULT 0,
+        gps_miles       NUMERIC(10,1) NOT NULL DEFAULT 0,
+        fetched_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        CONSTRAINT gps_cache_device_date_key UNIQUE (device_id, date)
+      )
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS gps_cache_date_idx ON gps_cache (date)
+    `);
+
     logger.info("Database migrations completed");
   } finally {
     client.release();

@@ -71,6 +71,72 @@ export const GetOdometerRangeResponse = zod.object({
 
 
 /**
+ * @summary Fetch GPS data from One-Step GPS API and persist in database cache
+ */
+export const SyncGpsCacheBody = zod.object({
+  "device_ids": zod.array(zod.string()),
+  "from": zod.string(),
+  "to": zod.string(),
+  "force": zod.boolean().optional()
+})
+
+export const SyncGpsCacheResponse = zod.object({
+  "synced": zod.array(zod.string()),
+  "skipped": zod.array(zod.string())
+})
+
+
+/**
+ * @summary Query cached GPS data from database
+ */
+export const GetGpsCacheQueryParams = zod.object({
+  "from": zod.coerce.string(),
+  "to": zod.coerce.string(),
+  "device_ids[]": zod.array(zod.coerce.string()).optional()
+})
+
+export const GetGpsCacheResponseItem = zod.object({
+  "device_id": zod.string(),
+  "device_name": zod.string(),
+  "date": zod.string(),
+  "begin_odometer": zod.number(),
+  "end_odometer": zod.number(),
+  "gps_miles": zod.number(),
+  "fetched_at": zod.string().nullish()
+})
+export const GetGpsCacheResponse = zod.array(GetGpsCacheResponseItem)
+
+
+/**
+ * @summary Combined report — GPS cache joined with annotations, filterable
+ */
+export const GetReportsQueryParams = zod.object({
+  "from": zod.coerce.string(),
+  "to": zod.coerce.string(),
+  "device_ids[]": zod.array(zod.coerce.string()).optional(),
+  "project": zod.coerce.string().optional(),
+  "leader": zod.coerce.string().optional()
+})
+
+export const GetReportsResponseItem = zod.object({
+  "device_id": zod.string(),
+  "device_name": zod.string(),
+  "date": zod.string(),
+  "begin_odometer": zod.number().nullish(),
+  "end_odometer": zod.number().nullish(),
+  "gps_miles": zod.number().nullish(),
+  "indirect_miles": zod.number(),
+  "personal_miles": zod.number(),
+  "direct_miles": zod.number(),
+  "project_number": zod.string(),
+  "team_leader_name": zod.string(),
+  "is_exported": zod.boolean(),
+  "split_index": zod.number()
+})
+export const GetReportsResponse = zod.array(GetReportsResponseItem)
+
+
+/**
  * @summary List all projects
  */
 export const ListProjectsResponseItem = zod.object({

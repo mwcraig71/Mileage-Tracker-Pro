@@ -15,6 +15,7 @@ tags:
   - name: annotations
   - name: config
   - name: driverSessions
+  - name: reports
 paths:
   /healthz:
     get:
@@ -101,6 +102,99 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/OdometerRange"
+
+  /gps/cache/sync:
+    post:
+      operationId: syncGpsCache
+      tags: [gps]
+      summary: Fetch GPS data from One-Step GPS API and persist in database cache
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GpsCacheSyncInput"
+      responses:
+        "200":
+          description: Sync result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GpsCacheSyncResult"
+
+  /gps/cache:
+    get:
+      operationId: getGpsCache
+      tags: [gps]
+      summary: Query cached GPS data from database
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: "device_ids[]"
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+          explode: true
+      responses:
+        "200":
+          description: Cached GPS entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GpsCacheEntry"
+
+  /reports:
+    get:
+      operationId: getReports
+      tags: [reports]
+      summary: Combined report — GPS cache joined with annotations, filterable
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: "device_ids[]"
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+          explode: true
+        - name: project
+          in: query
+          schema:
+            type: string
+        - name: leader
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Report rows
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ReportRow"
 
   /projects:
     get:
@@ -765,3 +859,85 @@ components:
         shift_date:
           type: string
           description: "Date to backdate the shift to (YYYY-MM-DD). Defaults to today if omitted."
+
+    GpsCacheEntry:
+      type: object
+      required: [device_id, device_name, date, begin_odometer, end_odometer, gps_miles]
+      properties:
+        device_id:
+          type: string
+        device_name:
+          type: string
+        date:
+          type: string
+        begin_odometer:
+          type: number
+        end_odometer:
+          type: number
+        gps_miles:
+          type: number
+        fetched_at:
+          type: string
+          nullable: true
+
+    GpsCacheSyncInput:
+      type: object
+      required: [device_ids, from, to]
+      properties:
+        device_ids:
+          type: array
+          items:
+            type: string
+        from:
+          type: string
+        to:
+          type: string
+        force:
+          type: boolean
+
+    GpsCacheSyncResult:
+      type: object
+      required: [synced, skipped]
+      properties:
+        synced:
+          type: array
+          items:
+            type: string
+        skipped:
+          type: array
+          items:
+            type: string
+
+    ReportRow:
+      type: object
+      required: [device_id, device_name, date, indirect_miles, personal_miles, direct_miles, project_number, team_leader_name, is_exported, split_index]
+      properties:
+        device_id:
+          type: string
+        device_name:
+          type: string
+        date:
+          type: string
+        begin_odometer:
+          type: number
+          nullable: true
+        end_odometer:
+          type: number
+          nullable: true
+        gps_miles:
+          type: number
+          nullable: true
+        indirect_miles:
+          type: number
+        personal_miles:
+          type: number
+        direct_miles:
+          type: number
+        project_number:
+          type: string
+        team_leader_name:
+          type: string
+        is_exported:
+          type: boolean
+        split_index:
+          type: integer
