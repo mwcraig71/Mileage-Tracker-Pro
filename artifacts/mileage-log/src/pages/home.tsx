@@ -210,8 +210,11 @@ export default function Home() {
   const [unlockToken, setUnlockToken]         = useState<string | null>(null);
   const [passwordInput, setPasswordInput]     = useState("");
   const [passwordError, setPasswordError]     = useState("");
-  const [exportNewOnly, setExportNewOnly]     = useState(true);
   const [isGenerating, setIsGenerating]       = useState(false);
+  const [projectFilter, setProjectFilter]     = useState("");
+  const [leaderFilter, setLeaderFilter]       = useState("");
+  const [projectFilterOpen, setProjectFilterOpen] = useState(false);
+  const [leaderFilterOpen, setLeaderFilterOpen]   = useState(false);
 
   const loadedPeriodRef  = useRef<number | null>(null);
   const loadedArchiveRef = useRef<number | null>(null);
@@ -459,15 +462,19 @@ export default function Home() {
   }, [allRows, driverSessions, submitted]);
 
   // ── Sorted display rows ─────────────────────────────────────────────────────
-  const displayedRows = useMemo(
-    () => applySort(allRows, sortKey, sortDir, getAnnotation),
-    [allRows, sortKey, sortDir, getAnnotation],
-  );
+  const displayedRows = useMemo(() => {
+    let rows = applySort(allRows, sortKey, sortDir, getAnnotation);
+    if (projectFilter) rows = rows.filter(r => getAnnotation(r.key).project === projectFilter);
+    if (leaderFilter)  rows = rows.filter(r => getAnnotation(r.key).leader  === leaderFilter);
+    return rows;
+  }, [allRows, sortKey, sortDir, getAnnotation, projectFilter, leaderFilter]);
 
-  const archiveDisplayRows = useMemo(
-    () => applySort(archiveRows, sortKey, sortDir, getArchiveAnnotation),
-    [archiveRows, sortKey, sortDir, getArchiveAnnotation],
-  );
+  const archiveDisplayRows = useMemo(() => {
+    let rows = applySort(archiveRows, sortKey, sortDir, getArchiveAnnotation);
+    if (projectFilter) rows = rows.filter(r => getArchiveAnnotation(r.key).project === projectFilter);
+    if (leaderFilter)  rows = rows.filter(r => getArchiveAnnotation(r.key).leader  === leaderFilter);
+    return rows;
+  }, [archiveRows, sortKey, sortDir, getArchiveAnnotation, projectFilter, leaderFilter]);
 
   // ── Truck selector ──────────────────────────────────────────────────────────
   const isAllSelected = selectedIds.length === devices.length && devices.length > 0;
@@ -700,12 +707,7 @@ export default function Home() {
   };
 
   const handleExportCSV = async () => {
-    const rows = exportNewOnly
-      ? displayedRows.filter(r => {
-          const saved = savedAnnotationMap[r.key];
-          return !saved || !saved.is_exported;
-        })
-      : displayedRows;
+    const rows = displayedRows;
     if (!rows.length) return;
 
     const headers = [
@@ -1360,6 +1362,80 @@ export default function Home() {
                   className="h-9 w-[150px] bg-white/5 border-white/10 text-sm" />
               </div>
 
+              {/* Project filter */}
+              <div className="space-y-1.5">
+                <Label className="text-[10px] text-white/40 uppercase tracking-wider">Project</Label>
+                <Popover open={projectFilterOpen} onOpenChange={setProjectFilterOpen}>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline"
+                      className="h-9 min-w-[150px] justify-between bg-white/5 border-white/10 hover:bg-white/10 text-sm font-normal">
+                      <span className={cn(!projectFilter && "text-white/40")}>{projectFilter || "All projects"}</span>
+                      <div className="flex items-center gap-1">
+                        {projectFilter && (
+                          <X className="h-3 w-3 opacity-50 hover:opacity-100"
+                            onClick={e => { e.stopPropagation(); setProjectFilter(""); }} />
+                        )}
+                        <ChevronDown className="h-3.5 w-3.5 opacity-50 ml-1" />
+                      </div>
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[220px] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Search…" className="h-8" />
+                      <CommandList>
+                        <CommandEmpty>No projects found</CommandEmpty>
+                        <CommandGroup>
+                          {projectOptions.map(p => (
+                            <CommandItem key={p} value={p}
+                              onSelect={() => { setProjectFilter(p === projectFilter ? "" : p); setProjectFilterOpen(false); }}>
+                              <Check className={cn("mr-2 h-4 w-4", projectFilter === p ? "opacity-100" : "opacity-0")} />
+                              {p}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              {/* Leader filter */}
+              <div className="space-y-1.5">
+                <Label className="text-[10px] text-white/40 uppercase tracking-wider">Team Leader</Label>
+                <Popover open={leaderFilterOpen} onOpenChange={setLeaderFilterOpen}>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline"
+                      className="h-9 min-w-[150px] justify-between bg-white/5 border-white/10 hover:bg-white/10 text-sm font-normal">
+                      <span className={cn(!leaderFilter && "text-white/40")}>{leaderFilter || "All leaders"}</span>
+                      <div className="flex items-center gap-1">
+                        {leaderFilter && (
+                          <X className="h-3 w-3 opacity-50 hover:opacity-100"
+                            onClick={e => { e.stopPropagation(); setLeaderFilter(""); }} />
+                        )}
+                        <ChevronDown className="h-3.5 w-3.5 opacity-50 ml-1" />
+                      </div>
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[220px] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Search…" className="h-8" />
+                      <CommandList>
+                        <CommandEmpty>No leaders found</CommandEmpty>
+                        <CommandGroup>
+                          {leaderOptions.map(l => (
+                            <CommandItem key={l} value={l}
+                              onSelect={() => { setLeaderFilter(l === leaderFilter ? "" : l); setLeaderFilterOpen(false); }}>
+                              <Check className={cn("mr-2 h-4 w-4", leaderFilter === l ? "opacity-100" : "opacity-0")} />
+                              {l}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
+
               <Button onClick={handleGenerate}
                 disabled={selectedIds.length === 0 || !dateFrom || !dateTo || isLoadingGPS || isGenerating}
                 className="h-9 bg-amber-500 hover:bg-amber-400 text-black font-semibold text-sm">
@@ -1400,23 +1476,6 @@ export default function Home() {
               )}
             </div>
 
-            {/* Export new-only toggle */}
-            {submitted && !isLoadingGPS && displayedRows.length > 0 && (
-              <div className="mb-3 print:hidden">
-                <button
-                  onClick={() => setExportNewOnly(v => !v)}
-                  className={cn("flex items-center gap-2 text-xs px-2.5 py-1 rounded border transition-colors",
-                    exportNewOnly
-                      ? "border-amber-500/30 text-amber-400/80 bg-amber-500/5"
-                      : "border-white/10 text-white/30 hover:border-white/20")}>
-                  <div className={cn("h-3.5 w-3.5 rounded border flex items-center justify-center shrink-0",
-                    exportNewOnly ? "bg-amber-500 border-amber-500" : "border-white/30")}>
-                    {exportNewOnly && <Check className="h-2.5 w-2.5 text-black" />}
-                  </div>
-                  Export only rows not yet exported
-                </button>
-              </div>
-            )}
 
             {/* Finalize confirmation */}
             {showFinalizeConfirm && (

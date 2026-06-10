@@ -700,7 +700,7 @@ export default function Reports() {
                                   <button
                                     onClick={() => startEdit(row)}
                                     title="Edit row"
-                                    className="p-1 rounded text-white/30 hover:text-amber-400 hover:bg-amber-400/10 transition-colors">
+                                    className="p-1 rounded text-amber-400/60 hover:text-amber-400 hover:bg-amber-400/10 transition-colors">
                                     <Pencil className="h-3.5 w-3.5" />
                                   </button>
                                 )}
@@ -709,7 +709,7 @@ export default function Reports() {
                                   <button
                                     onClick={() => addPendingSplit(row)}
                                     title="Split mileage"
-                                    className="p-1 rounded text-white/30 hover:text-sky-400 hover:bg-sky-400/10 transition-colors">
+                                    className="p-1 rounded text-sky-400/60 hover:text-sky-400 hover:bg-sky-400/10 transition-colors">
                                     <Scissors className="h-3.5 w-3.5" />
                                   </button>
                                 )}
@@ -719,7 +719,7 @@ export default function Reports() {
                                     onClick={() => deleteSplit(row)}
                                     disabled={deleting}
                                     title="Remove split"
-                                    className="p-1 rounded text-white/30 hover:text-red-400 hover:bg-red-400/10 disabled:opacity-40 transition-colors">
+                                    className="p-1 rounded text-red-400/60 hover:text-red-400 hover:bg-red-400/10 disabled:opacity-40 transition-colors">
                                     {deleting
                                       ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
                                       : <X className="h-3.5 w-3.5" />}
