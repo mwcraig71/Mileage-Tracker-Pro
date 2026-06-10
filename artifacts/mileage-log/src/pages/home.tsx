@@ -2,10 +2,9 @@ import { useState, useMemo, useCallback, useEffect, useRef, Fragment } from "rea
 import { format, startOfMonth, endOfMonth, subMonths } from "date-fns";
 import {
   Truck, Filter, Printer, Download, Loader2, ChevronDown, Check, ChevronsUpDown,
-  Plus, Save, CheckCircle2, Lock, Unlock, ChevronUp, ArrowUpDown, Archive,
-  Clock, AlertTriangle, X, User, Scissors, BarChart2,
+  Plus, Save, CheckCircle2, ChevronUp, ArrowUpDown,
+  AlertTriangle, X, User, Scissors, Lock, Clock, Archive,
 } from "lucide-react";
-import { Link } from "wouter";
 import { useQuery, useQueries, useQueryClient } from "@tanstack/react-query";
 import {
   getGetMileageSummaryQueryOptions,
@@ -16,15 +15,15 @@ import {
   useListTeamLeaders,
   useCreateProject,
   useCreateTeamLeader,
-  useListPeriods,
   useGetOrCreatePeriod,
-  useFinalizePeriod,
-  useMarkAnnotationsExported,
   useUpsertAnnotation,
   useUpdateAnnotation,
-  useVerifyManagerPassword,
   useDeleteAnnotation,
   useSyncGpsCache,
+  useListPeriods,
+  useFinalizePeriod,
+  useMarkAnnotationsExported,
+  useVerifyManagerPassword,
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1138,83 +1137,6 @@ export default function Home() {
 
           {/* Actions */}
           <div className="flex items-center gap-1.5 shrink-0">
-            {/* Reports link */}
-            <Link to="/reports"
-              className="flex items-center gap-1 h-8 px-2 text-xs text-white/50 hover:text-white hover:bg-white/10 rounded-md transition-colors">
-              <BarChart2 className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Reports</span>
-            </Link>
-
-            {/* Period selector */}
-            <Popover open={periodSelectorOpen} onOpenChange={setPeriodSelectorOpen}>
-              <PopoverTrigger asChild>
-                <Button variant="ghost" size="sm"
-                  className="h-8 text-xs text-white/50 hover:text-white hover:bg-white/10 gap-1.5">
-                  <Archive className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">Periods</span>
-                  <ChevronDown className="h-3 w-3 opacity-50" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent align="end" className="w-[230px] p-2">
-                {openPeriods.length > 0 && (
-                  <div className="mb-2">
-                    <p className="text-[10px] uppercase tracking-wider text-white/30 px-2 mb-1">Open</p>
-                    {openPeriods.map(p => (
-                      <button key={p.id}
-                        onClick={() => {
-                          setViewMode("current"); setActivePeriodId(p.id);
-                          loadedPeriodRef.current = null; setPeriodSelectorOpen(false);
-                        }}
-                        className={cn("w-full text-left px-2 py-1.5 rounded text-sm flex items-center gap-2 hover:bg-muted/60 transition-colors",
-                          activePeriodId === p.id && viewMode === "current" && "text-amber-400")}>
-                        <Clock className="h-3 w-3 opacity-60 shrink-0" />
-                        <span className="flex-1">{p.label}</span>
-                        {activePeriodId === p.id && viewMode === "current" && <Check className="h-3 w-3" />}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {finalizedPeriods.length > 0 && (
-                  <div>
-                    <p className="text-[10px] uppercase tracking-wider text-white/30 px-2 mb-1">Finalized</p>
-                    {finalizedPeriods.map(p => (
-                      <button key={p.id}
-                        onClick={() => handleSwitchToArchive(p.id)}
-                        className={cn("w-full text-left px-2 py-1.5 rounded text-sm flex items-center gap-2 hover:bg-muted/60 transition-colors",
-                          archivePeriodId === p.id && viewMode === "archive" && "text-amber-400")}>
-                        <Lock className="h-3 w-3 opacity-60 shrink-0" />
-                        <span className="flex-1">{p.label}</span>
-                        {archivePeriodId === p.id && viewMode === "archive" && <Check className="h-3 w-3" />}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {periods.length === 0 && (
-                  <p className="text-xs text-white/30 px-2 py-3 text-center">No periods yet. Generate a log to start.</p>
-                )}
-              </PopoverContent>
-            </Popover>
-
-            {/* Unlock (archive only) */}
-            {viewMode === "archive" && isFinalized && (
-              <Button variant="ghost" size="sm"
-                onClick={() => unlockToken ? setUnlockToken(null) : setShowPasswordModal(true)}
-                className={cn("h-8 text-xs gap-1.5",
-                  unlockToken
-                    ? "text-amber-400 hover:text-amber-300 hover:bg-amber-500/10"
-                    : "text-white/50 hover:text-white hover:bg-white/10")}>
-                {unlockToken ? <><Unlock className="h-3.5 w-3.5" />Unlocked</> : <><Lock className="h-3.5 w-3.5" />Unlock</>}
-              </Button>
-            )}
-
-            {/* Finalize (current, open period with saved rows) */}
-            {viewMode === "current" && currentPeriod && !currentPeriod.finalized && savedCount > 0 && (
-              <Button variant="ghost" size="sm"
-                onClick={() => setShowFinalizeConfirm(true)}
-                className="h-8 text-xs text-white/50 hover:text-amber-400 hover:bg-amber-500/10 gap-1.5">
-                <Lock className="h-3.5 w-3.5" />Finalize
-              </Button>
-            )}
 
             <Button variant="ghost" size="sm" onClick={() => window.print()}
               className="h-8 text-xs text-white/50 hover:text-white hover:bg-white/10">
@@ -1240,75 +1162,8 @@ export default function Home() {
 
       <main className="container mx-auto max-w-7xl px-4 mt-5">
 
-        {/* ── Archive view ─────────────────────────────────────────────────── */}
-        {viewMode === "archive" ? (
-          <>
-            <div className="flex flex-wrap items-center gap-3 mb-5 print:hidden">
-              <Button variant="outline" size="sm"
-                onClick={() => setViewMode("current")}
-                className="h-8 text-xs bg-white/5 border-white/10 hover:bg-white/10">
-                ← Back to Current Log
-              </Button>
-              {archivePeriod && (
-                <span className="text-sm text-white/40">
-                  {archivePeriod.label}
-                  {archivePeriod.finalized_at && (
-                    <span className="text-xs ml-2">· Finalized {format(new Date(archivePeriod.finalized_at), "MMM d, yyyy")}</span>
-                  )}
-                </span>
-              )}
-              <div className="flex-1" />
-              {saveSuccess && (
-                <span className="text-xs text-emerald-400 flex items-center gap-1">
-                  <CheckCircle2 className="h-3.5 w-3.5" />Saved
-                </span>
-              )}
-              {unlockToken && (
-                <Button onClick={handleSaveArchive} disabled={isSaving}
-                  className="h-8 text-xs bg-amber-500 hover:bg-amber-400 text-black font-semibold gap-1.5">
-                  {isSaving
-                    ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />Saving…</>
-                    : <><Save className="h-3.5 w-3.5" />Save Changes</>}
-                </Button>
-              )}
-            </div>
-
-            {unlockToken && (
-              <div className="mb-4 flex items-center gap-2 text-xs text-amber-400/80 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
-                <Unlock className="h-3.5 w-3.5 shrink-0" />
-                Editing unlocked — changes here do not affect GPS odometer readings.
-              </div>
-            )}
-
-            <div className="rounded-lg border border-white/10 overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm border-collapse">
-                  {tableHead}
-                  <tbody>
-                    {archiveFetching ? (
-                      <tr><td colSpan={11} className="py-20 text-center">
-                        <Loader2 className="h-6 w-6 animate-spin mx-auto mb-3 text-amber-400/50" />
-                        <p className="text-white/30 text-sm">Loading archive…</p>
-                      </td></tr>
-                    ) : archiveDisplayRows.length === 0 ? (
-                      <tr><td colSpan={11} className="py-20 text-center">
-                        <p className="text-white/30 text-sm">No data saved for this period.</p>
-                      </td></tr>
-                    ) : archiveDisplayRows.map((row, i) =>
-                        renderRow(row, i, getArchiveAnnotation(row.key), setArchiveAnnotation,
-                          { id: row.annotationId, is_exported: row.isExported }, !unlockToken)
-                      )
-                    }
-                  </tbody>
-                  {archiveDisplayRows.length > 0 && !archiveFetching &&
-                    renderFooter(archiveDisplayRows, getArchiveAnnotation)}
-                </table>
-              </div>
-            </div>
-          </>
-
-        ) : (
-          <>
+        {/* ── Current log view ─────────────────────────────────────────────── */}
+        <>
             {/* ── Current log controls ──────────────────────────────────────── */}
             <div className="flex flex-wrap items-end gap-3 mb-5 print:hidden">
               {/* Truck selector */}
@@ -1485,37 +1340,6 @@ export default function Home() {
             </div>
 
 
-            {/* Finalize confirmation */}
-            {showFinalizeConfirm && (
-              <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/5 p-4">
-                <div className="flex items-start gap-3">
-                  <AlertTriangle className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold text-amber-300">Finalize {currentPeriod?.label}?</p>
-                    <p className="text-xs text-white/50 mt-1">
-                      This locks all {savedCount} saved rows into a read-only archive.
-                      A manager password will be required to make any future edits.
-                    </p>
-                    <div className="flex gap-2 mt-3">
-                      <Button onClick={handleFinalize} disabled={finalizePeriodMut.isPending}
-                        className="h-8 text-xs bg-amber-500 hover:bg-amber-400 text-black font-semibold">
-                        {finalizePeriodMut.isPending
-                          ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          : "Confirm & Finalize"}
-                      </Button>
-                      <Button variant="ghost" onClick={() => setShowFinalizeConfirm(false)}
-                        className="h-8 text-xs text-white/50 hover:text-white hover:bg-white/10">
-                        Cancel
-                      </Button>
-                    </div>
-                  </div>
-                  <button onClick={() => setShowFinalizeConfirm(false)} className="text-white/30 hover:text-white/60">
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-            )}
-
             {/* GPS table */}
             <div className="rounded-lg border border-white/10 overflow-hidden">
               <div className="overflow-x-auto">
@@ -1548,7 +1372,6 @@ export default function Home() {
               </div>
             </div>
           </>
-        )}
       </main>
 
       {/* Password modal */}
