@@ -229,6 +229,21 @@ paths:
               schema:
                 $ref: "#/components/schemas/Project"
 
+  /projects/{project_number}:
+    delete:
+      operationId: deleteProject
+      tags: [projects]
+      summary: Delete a project
+      parameters:
+        - name: project_number
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
   /team-leaders:
     get:
       operationId: listTeamLeaders

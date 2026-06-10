@@ -23,4 +23,11 @@ router.post("/", async (req, res) => {
   res.status(201).json(result.rows[0]);
 });
 
+router.delete("/:project_number", async (req, res) => {
+  const { project_number } = req.params;
+  await pool.query("DELETE FROM project_states WHERE project_number = $1", [project_number]);
+  await pool.query("DELETE FROM projects WHERE project_number = $1", [project_number]);
+  res.status(204).send();
+});
+
 export default router;

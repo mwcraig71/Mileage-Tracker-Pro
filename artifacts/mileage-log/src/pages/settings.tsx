@@ -11,6 +11,7 @@ import {
   useGetGpsDevices,
   useListProjects,
   useCreateProject,
+  useDeleteProject,
   getListProjectsQueryKey,
   useListTruckStates,
   useSaveTruckStates,
@@ -192,15 +193,13 @@ function TruckStatesSection() {
                 value={local[t.device_id] ?? ""}
                 onChange={v => setLocal(prev => ({ ...prev, [t.device_id]: v }))}
               />
-              {t.isManual && (
-                <button
-                  onClick={() => handleDelete(t.device_id)}
-                  disabled={deleteMut.isPending}
-                  className="text-white/20 hover:text-red-400 transition-colors shrink-0 disabled:opacity-30"
-                  title="Remove truck">
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              )}
+              <button
+                onClick={() => handleDelete(t.device_id)}
+                disabled={deleteMut.isPending}
+                className="text-white/20 hover:text-red-400 transition-colors shrink-0 disabled:opacity-30"
+                title="Remove truck">
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
             </div>
           ))}
           <div className="pt-1">
@@ -249,6 +248,7 @@ function ProjectStatesSection() {
   const { data: savedStates = [] } = useListProjectStates();
   const saveMut          = useSaveProjectStates();
   const createProjectMut = useCreateProject();
+  const deleteMut        = useDeleteProject();
 
   const [local, setLocal]         = useState<Record<string, string>>({});
   const [saved, setSaved]         = useState(false);
@@ -261,22 +261,33 @@ function ProjectStatesSection() {
     setLocal(map);
   }, [savedStates]);
 
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: getListProjectsQueryKey() });
+    qc.invalidateQueries({ queryKey: getListProjectStatesQueryKey() });
+  };
+
   const handleSave = async () => {
     const payload: ProjectState[] = projects.map(p => ({
       project_number: p.project_number,
       state_code: local[p.project_number] ?? "",
     }));
     await saveMut.mutateAsync({ data: payload });
-    qc.invalidateQueries({ queryKey: getListProjectStatesQueryKey() });
+    invalidate();
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+  };
+
+  const handleDelete = async (projectNumber: string) => {
+    await deleteMut.mutateAsync({ projectNumber });
+    setLocal(prev => { const next = { ...prev }; delete next[projectNumber]; return next; });
+    invalidate();
   };
 
   const handleAddProject = async () => {
     setAddError("");
     if (!newProj.trim()) { setAddError("Project number is required."); return; }
     await createProjectMut.mutateAsync({ data: { project_number: newProj.trim() } });
-    qc.invalidateQueries({ queryKey: getListProjectsQueryKey() });
+    invalidate();
     setNewProj("");
   };
 
@@ -296,6 +307,13 @@ function ProjectStatesSection() {
                 value={local[p.project_number] ?? ""}
                 onChange={v => setLocal(prev => ({ ...prev, [p.project_number]: v }))}
               />
+              <button
+                onClick={() => handleDelete(p.project_number)}
+                disabled={deleteMut.isPending}
+                className="text-white/20 hover:text-red-400 transition-colors shrink-0 disabled:opacity-30"
+                title="Delete project">
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
             </div>
           ))}
           <div className="pt-1">

@@ -158,6 +158,14 @@ export const CreateProjectBody = zod.object({
 
 
 /**
+ * @summary Delete a project
+ */
+export const DeleteProjectParams = zod.object({
+  "project_number": zod.coerce.string()
+})
+
+
+/**
  * @summary List all team leaders
  */
 export const ListTeamLeadersResponseItem = zod.object({

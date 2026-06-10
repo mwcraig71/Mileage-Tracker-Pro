@@ -794,6 +794,76 @@ export const useCreateProject = <TError = ErrorType<unknown>,
       return useMutation(getCreateProjectMutationOptions(options));
     }
 
+export const getDeleteProjectUrl = (projectNumber: string,) => {
+
+
+
+
+  return `/api/projects/${projectNumber}`
+}
+
+/**
+ * @summary Delete a project
+ */
+export const deleteProject = async (projectNumber: string, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteProjectUrl(projectNumber),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteProjectMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteProject>>, TError,{projectNumber: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteProject>>, TError,{projectNumber: string}, TContext> => {
+
+const mutationKey = ['deleteProject'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteProject>>, {projectNumber: string}> = (props) => {
+          const {projectNumber} = props ?? {};
+
+          return  deleteProject(projectNumber,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteProjectMutationResult = NonNullable<Awaited<ReturnType<typeof deleteProject>>>
+
+    export type DeleteProjectMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Delete a project
+ */
+export const useDeleteProject = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteProject>>, TError,{projectNumber: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteProject>>,
+        TError,
+        {projectNumber: string},
+        TContext
+      > => {
+      return useMutation(getDeleteProjectMutationOptions(options));
+    }
+
 export const getListTeamLeadersUrl = () => {
 
 

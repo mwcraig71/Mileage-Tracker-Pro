@@ -61,13 +61,9 @@ router.post("/trucks", async (req, res) => {
   res.status(201).json({ device_id, device_name: display_name.trim(), state_code: "" });
 });
 
-// Delete a manually-registered truck (only manual- prefixed IDs)
+// Delete a truck's state record (any truck)
 router.delete("/trucks/:device_id", async (req, res) => {
   const { device_id } = req.params;
-  if (!device_id.startsWith("manual-")) {
-    res.status(400).json({ error: "Only manually-added trucks can be deleted" });
-    return;
-  }
   await pool.query("DELETE FROM truck_states WHERE device_id = $1", [device_id]);
   res.status(204).end();
 });
