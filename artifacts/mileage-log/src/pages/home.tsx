@@ -1385,6 +1385,10 @@ export default function Home() {
                       <CommandList>
                         <CommandEmpty>No projects found</CommandEmpty>
                         <CommandGroup>
+                          <CommandItem value="__all_projects__" onSelect={() => { setProjectFilter(""); setProjectFilterOpen(false); }}>
+                            <Check className={cn("mr-2 h-4 w-4", !projectFilter ? "opacity-100" : "opacity-0")} />
+                            All Projects
+                          </CommandItem>
                           {projectOptions.map(p => (
                             <CommandItem key={p} value={p}
                               onSelect={() => { setProjectFilter(p === projectFilter ? "" : p); setProjectFilterOpen(false); }}>
@@ -1422,6 +1426,10 @@ export default function Home() {
                       <CommandList>
                         <CommandEmpty>No leaders found</CommandEmpty>
                         <CommandGroup>
+                          <CommandItem value="__all_leaders__" onSelect={() => { setLeaderFilter(""); setLeaderFilterOpen(false); }}>
+                            <Check className={cn("mr-2 h-4 w-4", !leaderFilter ? "opacity-100" : "opacity-0")} />
+                            All Leaders
+                          </CommandItem>
                           {leaderOptions.map(l => (
                             <CommandItem key={l} value={l}
                               onSelect={() => { setLeaderFilter(l === leaderFilter ? "" : l); setLeaderFilterOpen(false); }}>

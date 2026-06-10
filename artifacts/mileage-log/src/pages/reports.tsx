@@ -443,6 +443,10 @@ export default function Reports() {
                     <CommandList>
                       <CommandEmpty>No projects found</CommandEmpty>
                       <CommandGroup>
+                        <CommandItem value="__all_projects__" onSelect={() => { setProjectFilter(""); setProjectOpen(false); setSubmitted(false); }}>
+                          <Check className={cn("mr-2 h-4 w-4", !projectFilter ? "opacity-100" : "opacity-0")} />
+                          All Projects
+                        </CommandItem>
                         {projects.map(p => (
                           <CommandItem key={p.id} value={p.project_number}
                             onSelect={() => { setProjectFilter(p.project_number); setProjectOpen(false); setSubmitted(false); }}>
@@ -481,6 +485,10 @@ export default function Reports() {
                     <CommandList>
                       <CommandEmpty>No leaders found</CommandEmpty>
                       <CommandGroup>
+                        <CommandItem value="__all_leaders__" onSelect={() => { setLeaderFilter(""); setLeaderOpen(false); setSubmitted(false); }}>
+                          <Check className={cn("mr-2 h-4 w-4", !leaderFilter ? "opacity-100" : "opacity-0")} />
+                          All Leaders
+                        </CommandItem>
                         {teamLeaders.map(l => (
                           <CommandItem key={l.id} value={l.name}
                             onSelect={() => { setLeaderFilter(l.name); setLeaderOpen(false); setSubmitted(false); }}>
