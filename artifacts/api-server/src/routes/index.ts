@@ -10,6 +10,7 @@ import configRouter from "./config";
 import driverSessionsRouter from "./driverSessions";
 import reportsRouter from "./reports";
 import settingsRouter from "./settings";
+import alertsRouter from "./alerts";
 
 const router: IRouter = Router();
 
@@ -24,5 +25,6 @@ router.use("/config", configRouter);
 router.use("/driver-sessions", driverSessionsRouter);
 router.use("/reports", reportsRouter);
 router.use("/settings", settingsRouter);
+router.use("/alerts", alertsRouter);
 
 export default router;

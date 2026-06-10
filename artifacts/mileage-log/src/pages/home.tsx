@@ -25,6 +25,9 @@ import {
   useFinalizePeriod,
   useMarkAnnotationsExported,
   useVerifyManagerPassword,
+  useListAlerts,
+  useDismissAlert,
+  getListAlertsQueryKey,
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -204,6 +207,9 @@ export default function Home() {
   const [sessionPrefilled, setSessionPrefilled] = useState<Set<string>>(new Set());
   const [sessionMultiple, setSessionMultiple]   = useState<Set<string>>(new Set());
 
+  // ── Alert banner state ──────────────────────────────────────────────────────
+  const [alertsBannerExpanded, setAlertsBannerExpanded] = useState(true);
+
   // ── UI state ────────────────────────────────────────────────────────────────
   const [isSaving, setIsSaving]               = useState(false);
   const [saveSuccess, setSaveSuccess]         = useState(false);
@@ -244,6 +250,8 @@ export default function Home() {
   const deleteAnnotationM  = useDeleteAnnotation();
   const verifyPasswordM    = useVerifyManagerPassword();
   const syncGpsCacheMut    = useSyncGpsCache();
+  const { data: alerts = [] } = useListAlerts();
+  const dismissAlertMut       = useDismissAlert();
 
   const { data: periodAnnotations } = useQuery({
     ...getListPeriodAnnotationsQueryOptions(activePeriodId ?? 0),
@@ -1244,6 +1252,61 @@ export default function Home() {
           </div>
         </div>
       </header>
+
+      {/* ── Accountability alert banner ──────────────────────────────────── */}
+      {alerts.length > 0 && (
+        <div className="print:hidden border-b border-amber-500/20 bg-amber-500/5">
+          <div className="container mx-auto max-w-7xl px-4">
+            <button
+              onClick={() => setAlertsBannerExpanded(p => !p)}
+              className="w-full flex items-center gap-2 py-2.5 text-left"
+            >
+              <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0" />
+              <span className="text-sm font-medium text-amber-300">
+                {alerts.length} unaccounted truck movement{alerts.length !== 1 ? "s" : ""} detected
+              </span>
+              <span className="text-xs text-white/30 ml-1">
+                — trucks moved yesterday with no driver or project on record
+              </span>
+              <ChevronDown className={`h-3.5 w-3.5 text-white/30 ml-auto transition-transform ${alertsBannerExpanded ? "rotate-180" : ""}`} />
+            </button>
+
+            {alertsBannerExpanded && (
+              <div className="pb-3 space-y-1.5">
+                {alerts.map(alert => (
+                  <div key={alert.id} className="flex items-center gap-3 bg-amber-500/8 rounded-md px-3 py-2 border border-amber-500/15">
+                    <Truck className="h-3.5 w-3.5 text-amber-400/70 shrink-0" />
+                    <span className="text-sm font-medium text-white/80">{alert.device_name}</span>
+                    <span className="text-xs text-white/30">·</span>
+                    <span className="text-xs text-amber-400/80 font-mono">{alert.alert_date}</span>
+                    <span className="text-xs text-white/30">·</span>
+                    {alert.issue === "no_session" ? (
+                      <span className="text-xs text-red-300/80 flex items-center gap-1">
+                        <User className="h-3 w-3" /> No driver logged
+                      </span>
+                    ) : (
+                      <span className="text-xs text-orange-300/80 flex items-center gap-1">
+                        <AlertTriangle className="h-3 w-3" /> No project assigned
+                      </span>
+                    )}
+                    <button
+                      onClick={async () => {
+                        await dismissAlertMut.mutateAsync({ id: alert.id });
+                        qc.invalidateQueries({ queryKey: getListAlertsQueryKey() });
+                      }}
+                      disabled={dismissAlertMut.isPending}
+                      className="ml-auto text-white/20 hover:text-white/60 transition-colors disabled:opacity-30"
+                      title="Dismiss"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Print header */}
       <div className="hidden print:block text-center py-4 border-b border-black mb-4">

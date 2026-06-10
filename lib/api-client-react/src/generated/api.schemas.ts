@@ -235,6 +235,38 @@ export interface StateContactInput {
   email: string;
 }
 
+export type DailyAlertIssue = typeof DailyAlertIssue[keyof typeof DailyAlertIssue];
+
+
+export const DailyAlertIssue = {
+  no_session: 'no_session',
+  no_project: 'no_project',
+} as const;
+
+export interface DailyAlert {
+  id: number;
+  /** YYYY-MM-DD */
+  alert_date: string;
+  device_id: string;
+  device_name: string;
+  issue: DailyAlertIssue;
+  dismissed: boolean;
+  created_at: string;
+}
+
+export type AlertCheckResultDetailsItem = {
+  device_id: string;
+  device_name: string;
+  issue: string;
+};
+
+export interface AlertCheckResult {
+  checked_date: string;
+  trucks_with_movement: number;
+  alerts_inserted: number;
+  details: AlertCheckResultDetailsItem[];
+}
+
 export type GetMileageSummaryParams = {
 device_id: string;
 from: string;

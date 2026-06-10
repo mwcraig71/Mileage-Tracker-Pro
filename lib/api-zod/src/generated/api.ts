@@ -498,3 +498,51 @@ export const DeleteStateContactParams = zod.object({
 })
 
 
+/**
+ * @summary List unresolved daily accountability alerts (last 7 days)
+ */
+export const ListAlertsResponseItem = zod.object({
+  "id": zod.number(),
+  "alert_date": zod.string().describe('YYYY-MM-DD'),
+  "device_id": zod.string(),
+  "device_name": zod.string(),
+  "issue": zod.enum(['no_session', 'no_project']),
+  "dismissed": zod.boolean(),
+  "created_at": zod.string()
+})
+export const ListAlertsResponse = zod.array(ListAlertsResponseItem)
+
+
+/**
+ * @summary Manually trigger the daily accountability check
+ */
+export const TriggerAlertCheckResponse = zod.object({
+  "checked_date": zod.string(),
+  "trucks_with_movement": zod.number(),
+  "alerts_inserted": zod.number(),
+  "details": zod.array(zod.object({
+  "device_id": zod.string(),
+  "device_name": zod.string(),
+  "issue": zod.string()
+}))
+})
+
+
+/**
+ * @summary Dismiss a single alert
+ */
+export const DismissAlertParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DismissAlertResponse = zod.object({
+  "id": zod.number(),
+  "alert_date": zod.string().describe('YYYY-MM-DD'),
+  "device_id": zod.string(),
+  "device_name": zod.string(),
+  "issue": zod.enum(['no_session', 'no_project']),
+  "dismissed": zod.boolean(),
+  "created_at": zod.string()
+})
+
+

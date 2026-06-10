@@ -6,9 +6,13 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './alertCheckResult';
+export * from './alertCheckResultDetailsItem';
 export * from './annotation';
 export * from './annotationInput';
 export * from './annotationUpdate';
+export * from './dailyAlert';
+export * from './dailyAlertIssue';
 export * from './dailyMileage';
 export * from './driverSession';
 export * from './driverSessionInput';

@@ -17,6 +17,7 @@ tags:
   - name: driverSessions
   - name: reports
   - name: settings
+  - name: alerts
 paths:
   /healthz:
     get:
@@ -704,6 +705,59 @@ paths:
         "204":
           description: Deleted
 
+  /alerts:
+    get:
+      operationId: listAlerts
+      tags: [alerts]
+      summary: List unresolved daily accountability alerts (last 7 days)
+      responses:
+        "200":
+          description: List of alerts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DailyAlert"
+
+  /alerts/check:
+    post:
+      operationId: triggerAlertCheck
+      tags: [alerts]
+      summary: Manually trigger the daily accountability check
+      responses:
+        "200":
+          description: Check result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertCheckResult"
+
+  /alerts/{id}/dismiss:
+    patch:
+      operationId: dismissAlert
+      tags: [alerts]
+      summary: Dismiss a single alert
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Dismissed alert
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DailyAlert"
+        "404":
+          description: Alert not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -1155,3 +1209,47 @@ components:
           type: string
         email:
           type: string
+
+    DailyAlert:
+      type: object
+      required: [id, alert_date, device_id, device_name, issue, dismissed, created_at]
+      properties:
+        id:
+          type: integer
+        alert_date:
+          type: string
+          description: "YYYY-MM-DD"
+        device_id:
+          type: string
+        device_name:
+          type: string
+        issue:
+          type: string
+          enum: [no_session, no_project]
+        dismissed:
+          type: boolean
+        created_at:
+          type: string
+
+    AlertCheckResult:
+      type: object
+      required: [checked_date, trucks_with_movement, alerts_inserted, details]
+      properties:
+        checked_date:
+          type: string
+        trucks_with_movement:
+          type: integer
+        alerts_inserted:
+          type: integer
+        details:
+          type: array
+          items:
+            type: object
+            required: [device_id, device_name, issue]
+            properties:
+              device_id:
+                type: string
+              device_name:
+                type: string
+              issue:
+                type: string

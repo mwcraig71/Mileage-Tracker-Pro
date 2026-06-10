@@ -209,6 +209,24 @@ export async function runMigrations(): Promise<void> {
       )
     `);
 
+    // ── Daily alerts table ────────────────────────────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS daily_alerts (
+        id           SERIAL PRIMARY KEY,
+        alert_date   DATE NOT NULL,
+        device_id    TEXT NOT NULL,
+        device_name  TEXT NOT NULL,
+        issue        TEXT NOT NULL CHECK (issue IN ('no_session', 'no_project')),
+        dismissed    BOOLEAN NOT NULL DEFAULT FALSE,
+        created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (alert_date, device_id, issue)
+      )
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS daily_alerts_date_idx ON daily_alerts (alert_date)
+    `);
+
     logger.info("Database migrations completed");
   } finally {
     client.release();
