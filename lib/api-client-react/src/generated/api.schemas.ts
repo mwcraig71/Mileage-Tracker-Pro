@@ -207,6 +207,30 @@ export interface ReportRow {
   period_id?: number | null;
 }
 
+export interface TruckState {
+  device_id: string;
+  device_name: string;
+  state_code: string;
+}
+
+export interface ProjectState {
+  project_number: string;
+  state_code: string;
+}
+
+export interface StateContact {
+  id: number;
+  state_code: string;
+  contact_name: string;
+  email: string;
+}
+
+export interface StateContactInput {
+  state_code: string;
+  contact_name: string;
+  email: string;
+}
+
 export type GetMileageSummaryParams = {
 device_id: string;
 from: string;

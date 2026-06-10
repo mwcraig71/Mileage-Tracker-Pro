@@ -183,6 +183,32 @@ export async function runMigrations(): Promise<void> {
       CREATE INDEX IF NOT EXISTS gps_cache_date_idx ON gps_cache (date)
     `);
 
+    // ── Settings tables ───────────────────────────────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS truck_states (
+        device_id   TEXT PRIMARY KEY,
+        device_name TEXT NOT NULL DEFAULT '',
+        state_code  TEXT NOT NULL DEFAULT ''
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS project_states (
+        project_number TEXT PRIMARY KEY,
+        state_code     TEXT NOT NULL DEFAULT ''
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS state_contacts (
+        id           SERIAL PRIMARY KEY,
+        state_code   TEXT NOT NULL,
+        contact_name TEXT NOT NULL,
+        email        TEXT NOT NULL,
+        UNIQUE (state_code, email)
+      )
+    `);
+
     logger.info("Database migrations completed");
   } finally {
     client.release();

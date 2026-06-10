@@ -402,3 +402,75 @@ export const VerifyManagerPasswordResponse = zod.object({
 })
 
 
+/**
+ * @summary List truck state assignments
+ */
+export const ListTruckStatesResponseItem = zod.object({
+  "device_id": zod.string(),
+  "device_name": zod.string(),
+  "state_code": zod.string()
+})
+export const ListTruckStatesResponse = zod.array(ListTruckStatesResponseItem)
+
+
+/**
+ * @summary Save truck state assignments (full replace)
+ */
+export const SaveTruckStatesBodyItem = zod.object({
+  "device_id": zod.string(),
+  "device_name": zod.string(),
+  "state_code": zod.string()
+})
+export const SaveTruckStatesBody = zod.array(SaveTruckStatesBodyItem)
+
+
+/**
+ * @summary List project state assignments
+ */
+export const ListProjectStatesResponseItem = zod.object({
+  "project_number": zod.string(),
+  "state_code": zod.string()
+})
+export const ListProjectStatesResponse = zod.array(ListProjectStatesResponseItem)
+
+
+/**
+ * @summary Save project state assignments (full replace)
+ */
+export const SaveProjectStatesBodyItem = zod.object({
+  "project_number": zod.string(),
+  "state_code": zod.string()
+})
+export const SaveProjectStatesBody = zod.array(SaveProjectStatesBodyItem)
+
+
+/**
+ * @summary List state contacts
+ */
+export const ListStateContactsResponseItem = zod.object({
+  "id": zod.number(),
+  "state_code": zod.string(),
+  "contact_name": zod.string(),
+  "email": zod.string()
+})
+export const ListStateContactsResponse = zod.array(ListStateContactsResponseItem)
+
+
+/**
+ * @summary Add a state contact
+ */
+export const CreateStateContactBody = zod.object({
+  "state_code": zod.string(),
+  "contact_name": zod.string(),
+  "email": zod.string()
+})
+
+
+/**
+ * @summary Delete a state contact
+ */
+export const DeleteStateContactParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+

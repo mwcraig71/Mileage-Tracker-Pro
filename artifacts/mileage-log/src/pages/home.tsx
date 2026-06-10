@@ -1,9 +1,10 @@
 import { useState, useMemo, useCallback, useEffect, useRef, Fragment } from "react";
+import { useLocation } from "wouter";
 import { format, startOfMonth, endOfMonth, subMonths } from "date-fns";
 import {
   Truck, Filter, Printer, Download, Loader2, ChevronDown, Check, ChevronsUpDown,
   Plus, Save, CheckCircle2, ChevronUp, ArrowUpDown,
-  AlertTriangle, X, User, Scissors, Lock, Clock, Archive, FileText,
+  AlertTriangle, X, User, Scissors, Lock, Clock, Archive, FileText, Settings,
 } from "lucide-react";
 import { useQuery, useQueries, useQueryClient } from "@tanstack/react-query";
 import {
@@ -185,6 +186,8 @@ export default function Home() {
   const [annotations, setAnnotations]           = useState<Record<string, RowAnnotation>>({});
   const [extraSplits, setExtraSplits]           = useState<Record<string, RowAnnotation[]>>({});
   const [savedAnnotationMap, setSavedAnnotationMap] = useState<Record<string, { id: number; is_exported: boolean; splitIds?: number[] }>>({});
+
+  const [, navigate] = useLocation();
 
   // ── Period & archive state ──────────────────────────────────────────────────
   const [activePeriodId, setActivePeriodId]   = useState<number | null>(null);
@@ -1230,6 +1233,14 @@ export default function Home() {
                 <span className="hidden sm:inline">Project Reports</span>
               </Button>
             )}
+
+            <div className="h-4 w-px bg-white/10 mx-0.5" />
+
+            <Button variant="ghost" size="sm" onClick={() => navigate("/settings")}
+              className="h-8 text-xs text-white/40 hover:text-white hover:bg-white/10"
+              title="Settings">
+              <Settings className="h-3.5 w-3.5" />
+            </Button>
           </div>
         </div>
       </header>

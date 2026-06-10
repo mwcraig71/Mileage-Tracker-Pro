@@ -16,6 +16,7 @@ tags:
   - name: config
   - name: driverSessions
   - name: reports
+  - name: settings
 paths:
   /healthz:
     get:
@@ -547,6 +548,113 @@ paths:
               schema:
                 $ref: "#/components/schemas/PasswordVerifyResult"
 
+  /settings/truck-states:
+    get:
+      operationId: listTruckStates
+      tags: [settings]
+      summary: List truck state assignments
+      responses:
+        "200":
+          description: Truck states
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TruckState"
+    put:
+      operationId: saveTruckStates
+      tags: [settings]
+      summary: Save truck state assignments (full replace)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: "#/components/schemas/TruckState"
+      responses:
+        "200":
+          description: Saved
+
+  /settings/project-states:
+    get:
+      operationId: listProjectStates
+      tags: [settings]
+      summary: List project state assignments
+      responses:
+        "200":
+          description: Project states
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProjectState"
+    put:
+      operationId: saveProjectStates
+      tags: [settings]
+      summary: Save project state assignments (full replace)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: "#/components/schemas/ProjectState"
+      responses:
+        "200":
+          description: Saved
+
+  /settings/state-contacts:
+    get:
+      operationId: listStateContacts
+      tags: [settings]
+      summary: List state contacts
+      responses:
+        "200":
+          description: State contacts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StateContact"
+    post:
+      operationId: createStateContact
+      tags: [settings]
+      summary: Add a state contact
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StateContactInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StateContact"
+
+  /settings/state-contacts/{id}:
+    delete:
+      operationId: deleteStateContact
+      tags: [settings]
+      summary: Delete a state contact
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
 components:
   schemas:
     HealthStatus:
@@ -947,3 +1055,47 @@ components:
         period_id:
           type: integer
           nullable: true
+
+    TruckState:
+      type: object
+      required: [device_id, device_name, state_code]
+      properties:
+        device_id:
+          type: string
+        device_name:
+          type: string
+        state_code:
+          type: string
+
+    ProjectState:
+      type: object
+      required: [project_number, state_code]
+      properties:
+        project_number:
+          type: string
+        state_code:
+          type: string
+
+    StateContact:
+      type: object
+      required: [id, state_code, contact_name, email]
+      properties:
+        id:
+          type: integer
+        state_code:
+          type: string
+        contact_name:
+          type: string
+        email:
+          type: string
+
+    StateContactInput:
+      type: object
+      required: [state_code, contact_name, email]
+      properties:
+        state_code:
+          type: string
+        contact_name:
+          type: string
+        email:
+          type: string
