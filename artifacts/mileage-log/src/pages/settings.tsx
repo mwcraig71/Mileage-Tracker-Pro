@@ -486,6 +486,82 @@ function StateContactsSection() {
   );
 }
 
+// ── Alert Schedule section ────────────────────────────────────────────────────
+function AlertScheduleSection() {
+  const qc = useQueryClient();
+  const { data, isLoading } = useGetAlertConfig();
+  const updateMut = useUpdateAlertConfig({
+    mutation: {
+      onSuccess: () => qc.invalidateQueries({ queryKey: getGetAlertConfigQueryKey() }),
+    },
+  });
+
+  const [time, setTime] = useState("10:00");
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    if (data?.check_time) setTime(data.check_time);
+  }, [data?.check_time]);
+
+  function handleSave() {
+    updateMut.mutate(
+      { data: { check_time: time } },
+      {
+        onSuccess: () => {
+          setSaved(true);
+          setTimeout(() => setSaved(false), 2000);
+        },
+      }
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-white/40">
+        Every day at this time, the server checks whether any truck has moved without a logged
+        driver session or project. Unaccounted trucks trigger an alert banner and — once SMTP is
+        configured — an email to the responsible state contact.
+      </p>
+
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <Clock className="h-3.5 w-3.5 text-white/40" />
+          <span className="text-xs text-white/60">Check runs daily at</span>
+        </div>
+        <input
+          type="time"
+          value={time}
+          onChange={e => { setTime(e.target.value); setSaved(false); }}
+          disabled={isLoading}
+          style={{ colorScheme: "dark" }}
+          className="h-8 rounded-md border border-white/10 bg-[#1c2333] px-2 text-sm text-white font-mono
+                     focus:outline-none focus:border-amber-500/50 disabled:opacity-40"
+        />
+        <Button
+          onClick={handleSave}
+          disabled={updateMut.isPending || isLoading}
+          className="h-8 text-xs bg-amber-500 hover:bg-amber-400 text-black font-semibold gap-1.5"
+        >
+          {updateMut.isPending ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : saved ? (
+            <CheckCircle2 className="h-3.5 w-3.5" />
+          ) : (
+            <Save className="h-3.5 w-3.5" />
+          )}
+          {saved ? "Saved" : "Save"}
+        </Button>
+      </div>
+
+      {updateMut.isError && (
+        <p className="text-xs text-red-400 flex items-center gap-1">
+          <AlertTriangle className="h-3 w-3" /> Failed to save. Please try again.
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ── Settings page ────────────────────────────────────────────────────────────
 export default function SettingsPage() {
   const [, navigate] = useLocation();
@@ -528,6 +604,11 @@ export default function SettingsPage() {
         <Section icon={<Users className="h-4 w-4" />} title="State Contacts"
           description="People responsible per state — receives invoices, approvals, and reports.">
           <StateContactsSection />
+        </Section>
+
+        <Section icon={<Clock className="h-4 w-4" />} title="Daily Accountability Check"
+          description="Set when the server checks for trucks that moved without a logged session or project.">
+          <AlertScheduleSection />
         </Section>
       </main>
     </div>
