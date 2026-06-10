@@ -3,7 +3,7 @@ import { format, startOfMonth, endOfMonth, subMonths } from "date-fns";
 import {
   Truck, Filter, Printer, Download, Loader2, ChevronDown, Check, ChevronsUpDown,
   Plus, Save, CheckCircle2, ChevronUp, ArrowUpDown,
-  AlertTriangle, X, User, Scissors, Lock, Clock, Archive,
+  AlertTriangle, X, User, Scissors, Lock, Clock, Archive, FileText,
 } from "lucide-react";
 import { useQuery, useQueries, useQueryClient } from "@tanstack/react-query";
 import {
@@ -212,6 +212,8 @@ export default function Home() {
   const [isGenerating, setIsGenerating]       = useState(false);
   const [projectFilter, setProjectFilter]     = useState("");
   const [leaderFilter, setLeaderFilter]       = useState("");
+  const [showProjectReports, setShowProjectReports]       = useState(false);
+  const [selectedReportProjects, setSelectedReportProjects] = useState<Set<string>>(new Set());
   const [projectFilterOpen, setProjectFilterOpen] = useState(false);
   const [leaderFilterOpen, setLeaderFilterOpen]   = useState(false);
 
@@ -474,6 +476,19 @@ export default function Home() {
     if (leaderFilter)  rows = rows.filter(r => getArchiveAnnotation(r.key).leader  === leaderFilter);
     return rows;
   }, [archiveRows, sortKey, sortDir, getArchiveAnnotation, projectFilter, leaderFilter]);
+
+  // ── Projects present in the current GPS rows (for project reports modal) ─────
+  const availableReportProjects = useMemo(() => {
+    const set = new Set<string>();
+    for (const row of allRows) {
+      const ann = getAnnotation(row.key);
+      if (ann.project) set.add(ann.project);
+      for (const ex of extraSplits[row.key] ?? []) {
+        if (ex.project) set.add(ex.project);
+      }
+    }
+    return [...set].sort();
+  }, [allRows, getAnnotation, extraSplits]);
 
   // ── Truck selector ──────────────────────────────────────────────────────────
   const isAllSelected = selectedIds.length === devices.length && devices.length > 0;
@@ -752,6 +767,63 @@ export default function Home() {
         });
       }
     }
+  };
+
+  const handleOpenProjectReports = () => {
+    setSelectedReportProjects(new Set(availableReportProjects));
+    setShowProjectReports(true);
+  };
+
+  const handleCreateProjectReports = () => {
+    const headers = [
+      "DATE", "VEHICLE", "BEGIN ODOMETER", "END ODOMETER", "GPS MILES (DAY TOTAL)",
+      "INDIRECT MILES", "PERSONAL / UNALLOWABLE", "JOB (DIRECT) MILES", "TEAM LEADER", "PROJECT NUMBER",
+    ];
+
+    for (const proj of selectedReportProjects) {
+      const csvRows: string[][] = [];
+
+      for (const row of allRows) {
+        const ann    = getAnnotation(row.key);
+        const extras = extraSplits[row.key] ?? [];
+        const splits = [{ ...ann, isFirst: true }, ...extras.map(e => ({ ...e, isFirst: false }))];
+
+        for (const split of splits) {
+          if (split.project !== proj) continue;
+          const indirect = parseFloat(split.indirect) || 0;
+          const personal = parseFloat(split.personal) || 0;
+          const alloc    = split.allocated !== "" ? (parseFloat(split.allocated) || 0)
+                         : (split.isFirst ? row.gpsMiles : 0);
+          const direct   = split.direct !== "" ? parseFloat(split.direct)
+                         : Math.max(0, alloc - indirect - personal);
+          csvRows.push([
+            row.date,
+            row.deviceName,
+            row.beginOdo.toFixed(1),
+            row.endOdo.toFixed(1),
+            row.gpsMiles.toFixed(1),
+            indirect > 0 ? indirect.toFixed(1) : "",
+            personal > 0 ? personal.toFixed(1) : "",
+            direct.toFixed(1),
+            split.leader,
+            proj,
+          ]);
+        }
+      }
+
+      if (!csvRows.length) continue;
+
+      const csv  = [headers, ...csvRows].map(r => r.map(c => `"${String(c)}"`).join(",")).join("\n");
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement("a");
+      a.href     = url;
+      a.download = `project-report-${proj.replace(/[^a-z0-9]/gi, "-")}-${dateFrom}-to-${dateTo}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    setShowProjectReports(false);
   };
 
   const handleFinalize = async () => {
@@ -1150,6 +1222,14 @@ export default function Home() {
                 <span className="hidden sm:inline">Export CSV</span>
               </Button>
             )}
+
+            {viewMode === "current" && availableReportProjects.length > 0 && (
+              <Button variant="ghost" size="sm" onClick={handleOpenProjectReports}
+                className="h-8 text-xs text-amber-400/70 hover:text-amber-300 hover:bg-amber-500/10 gap-1.5 border border-amber-500/20">
+                <FileText className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Project Reports</span>
+              </Button>
+            )}
           </div>
         </div>
       </header>
@@ -1373,6 +1453,91 @@ export default function Home() {
             </div>
           </>
       </main>
+
+      {/* Project Reports modal */}
+      {showProjectReports && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+          onClick={e => { if (e.target === e.currentTarget) setShowProjectReports(false); }}>
+          <div className="bg-[#161b22] border border-white/10 rounded-xl shadow-2xl w-[440px] max-h-[80vh] flex flex-col">
+            {/* Header */}
+            <div className="flex items-center gap-3 px-6 py-4 border-b border-white/10 shrink-0">
+              <FileText className="h-5 w-5 text-amber-400" />
+              <div className="flex-1">
+                <h2 className="text-sm font-semibold">Project Reports</h2>
+                <p className="text-xs text-white/40 mt-0.5">{dateFrom} — {dateTo}</p>
+              </div>
+              <button onClick={() => setShowProjectReports(false)} className="text-white/30 hover:text-white/60">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Project list */}
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-1.5">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs text-white/40 uppercase tracking-wider">Select projects to export</p>
+                <div className="flex gap-2">
+                  <button onClick={() => setSelectedReportProjects(new Set(availableReportProjects))}
+                    className="text-xs text-amber-400/70 hover:text-amber-300">All</button>
+                  <span className="text-white/20">·</span>
+                  <button onClick={() => setSelectedReportProjects(new Set())}
+                    className="text-xs text-white/40 hover:text-white/60">None</button>
+                </div>
+              </div>
+
+              {availableReportProjects.map(proj => {
+                const checked = selectedReportProjects.has(proj);
+                const rowCount = allRows.filter(r => {
+                  const ann = getAnnotation(r.key);
+                  if (ann.project === proj) return true;
+                  return (extraSplits[r.key] ?? []).some(e => e.project === proj);
+                }).length;
+                return (
+                  <button key={proj}
+                    onClick={() => setSelectedReportProjects(prev => {
+                      const next = new Set(prev);
+                      if (next.has(proj)) next.delete(proj); else next.add(proj);
+                      return next;
+                    })}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-colors text-left ${
+                      checked
+                        ? "bg-amber-500/10 border-amber-500/30"
+                        : "bg-white/3 border-white/8 hover:bg-white/6"
+                    }`}>
+                    <div className={`h-4 w-4 rounded border flex items-center justify-center shrink-0 transition-colors ${
+                      checked ? "bg-amber-500 border-amber-500" : "border-white/30"
+                    }`}>
+                      {checked && <Check className="h-2.5 w-2.5 text-black" />}
+                    </div>
+                    <span className={`flex-1 text-sm font-medium ${checked ? "text-white" : "text-white/60"}`}>
+                      {proj}
+                    </span>
+                    <span className="text-xs text-white/30 font-mono">{rowCount} day{rowCount !== 1 ? "s" : ""}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-white/10 shrink-0">
+              <p className="text-xs text-white/30 mb-3">
+                One CSV file per project — each row is one truck day with mileage for that project.
+              </p>
+              <div className="flex gap-2">
+                <Button onClick={handleCreateProjectReports}
+                  disabled={selectedReportProjects.size === 0}
+                  className="flex-1 h-9 bg-amber-500 hover:bg-amber-400 text-black font-semibold text-sm gap-1.5 disabled:opacity-40">
+                  <Download className="h-4 w-4" />
+                  Create {selectedReportProjects.size > 0 ? `${selectedReportProjects.size} ` : ""}Report{selectedReportProjects.size !== 1 ? "s" : ""}
+                </Button>
+                <Button variant="ghost" onClick={() => setShowProjectReports(false)}
+                  className="h-9 text-sm text-white/50 hover:text-white hover:bg-white/10">
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Password modal */}
       {showPasswordModal && (
