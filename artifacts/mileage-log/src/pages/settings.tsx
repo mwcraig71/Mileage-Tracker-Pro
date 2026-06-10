@@ -577,9 +577,8 @@ export default function SettingsPage() {
           </button>
           <div className="h-4 w-px bg-white/15 mx-1" />
           <div className="flex items-center gap-2 flex-1">
-            <Truck className="h-4 w-4 text-amber-400" />
-            <span className="font-bold text-sm tracking-tight">FleetLog</span>
-            <span className="text-xs text-white/30 font-mono ml-1 hidden sm:inline">Settings</span>
+            <img src="/logo.png" alt="FleetLog" className="h-7 w-auto" />
+            <span className="text-xs text-white/30 font-mono hidden sm:inline">Settings</span>
           </div>
           <Settings className="h-4 w-4 text-white/20" />
         </div>

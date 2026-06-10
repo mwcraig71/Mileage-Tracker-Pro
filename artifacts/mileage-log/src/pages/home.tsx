@@ -1208,9 +1208,8 @@ export default function Home() {
         <div className="container mx-auto max-w-7xl px-4 h-14 flex items-center gap-3">
           {/* Logo */}
           <div className="flex items-center gap-2 shrink-0">
-            <Truck className="h-5 w-5 text-amber-400" />
-            <span className="font-bold text-base tracking-tight">FleetLog</span>
-            <span className="text-xs text-white/30 font-mono ml-1 hidden sm:block">Mileage Log</span>
+            <img src="/logo.png" alt="FleetLog" className="h-8 w-auto" />
+            <span className="text-xs text-white/30 font-mono hidden sm:block">Mileage Log</span>
           </div>
 
           {/* Period badge */}

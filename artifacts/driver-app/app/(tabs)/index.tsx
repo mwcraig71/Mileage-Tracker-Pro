@@ -3,6 +3,7 @@ import {
   View,
   Text,
   StyleSheet,
+  Image,
   TouchableOpacity,
   ScrollView,
   Modal,
@@ -233,10 +234,11 @@ export default function ShiftScreen() {
       >
         {/* Header */}
         <View style={s.header}>
-          <View style={s.headerIcon}>
-            <Feather name="truck" size={20} color={colors.primary} />
-          </View>
-          <Text style={s.headerTitle}>Truck Log</Text>
+          <Image
+            source={require("@/assets/images/logo.png")}
+            style={s.headerLogo}
+            resizeMode="contain"
+          />
         </View>
 
         {/* Date card */}
@@ -514,12 +516,8 @@ function makeStyles(c: Colors, insets: Insets) {
       paddingHorizontal: 20,
     },
 
-    header: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 20 },
-    headerIcon: {
-      width: 40, height: 40, borderRadius: 12,
-      backgroundColor: c.card, alignItems: "center", justifyContent: "center",
-    },
-    headerTitle: { fontSize: 24, fontFamily: "Inter_700Bold", color: c.foreground, letterSpacing: -0.5 },
+    header: { flexDirection: "row", alignItems: "center", marginBottom: 20 },
+    headerLogo: { height: 52, width: 160 },
 
     dateCard: {
       flexDirection: "row", alignItems: "center", justifyContent: "space-between",
