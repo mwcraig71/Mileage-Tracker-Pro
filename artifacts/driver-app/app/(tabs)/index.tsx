@@ -14,6 +14,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   useGetGpsDevices,
   useListProjects,
@@ -71,6 +72,33 @@ export default function ShiftScreen() {
   const [savingNew, setSavingNew]               = useState(false);
 
   const searchRef = useRef<TextInput>(null);
+
+  // ── Persistence ────────────────────────────────────────────────────────────
+  // Load saved selections on mount
+  useEffect(() => {
+    AsyncStorage.multiGet(["driver_app:driver", "driver_app:device_id", "driver_app:project"])
+      .then(([driverPair, devicePair, projectPair]) => {
+        if (driverPair[1])  setSelectedDriver(driverPair[1]);
+        if (devicePair[1])  setSelectedDeviceId(devicePair[1]);
+        if (projectPair[1]) setSelectedProject(projectPair[1]);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Persist driver whenever it changes
+  useEffect(() => {
+    AsyncStorage.setItem("driver_app:driver", selectedDriver).catch(() => {});
+  }, [selectedDriver]);
+
+  // Persist truck whenever it changes
+  useEffect(() => {
+    AsyncStorage.setItem("driver_app:device_id", selectedDeviceId).catch(() => {});
+  }, [selectedDeviceId]);
+
+  // Persist project whenever it changes
+  useEffect(() => {
+    AsyncStorage.setItem("driver_app:project", selectedProject).catch(() => {});
+  }, [selectedProject]);
 
   const { data: devices = [],     isLoading: devicesLoading  } = useGetGpsDevices();
   const { data: projects = [],    isLoading: projectsLoading, refetch: refetchProjects } = useListProjects();
@@ -187,9 +215,6 @@ export default function ShiftScreen() {
       setSuccessMsg(
         `Logged: ${selectedDriver} · ${selectedDevice?.display_name ?? selectedDeviceId}${selectedProject ? ` · ${selectedProject}` : ""} on ${selectedDateOpt.short}`,
       );
-      setSelectedDriver("");
-      setSelectedDeviceId("");
-      setSelectedProject("");
     } catch {
       setErrorMsg("Failed to save. Check your connection and try again.");
     }
