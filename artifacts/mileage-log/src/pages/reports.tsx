@@ -18,7 +18,7 @@ import {
 import { cn } from "@/lib/utils";
 
 const now = new Date();
-const DEFAULT_FROM = format(startOfMonth(subMonths(now, 1)), "yyyy-MM-dd");
+const DEFAULT_FROM = format(startOfMonth(subMonths(now, 2)), "yyyy-MM-dd");
 const DEFAULT_TO   = format(endOfMonth(subMonths(now, 1)), "yyyy-MM-dd");
 
 export default function Reports() {
@@ -319,11 +319,11 @@ export default function Reports() {
         )}
 
         {submitted && !isFetching && rows.length === 0 && (
-          <div className="text-center py-20 text-white/30 text-sm space-y-1">
-            <p>No data found for the selected filters.</p>
+          <div className="text-center py-20 text-white/30 text-sm space-y-2">
+            <p>No saved data found for <span className="text-white/50">{dateFrom}</span> – <span className="text-white/50">{dateTo}</span>.</p>
             <p className="text-xs text-white/20">
-              GPS data is cached when you generate a mileage log. Open the Mileage Log tab and
-              generate a log for this date range first.
+              Make sure the date range covers a period where annotations have been saved in the Mileage Log.
+              Try widening the date range, or open the Mileage Log tab to check which months have data.
             </p>
           </div>
         )}
