@@ -53,6 +53,7 @@ import type {
   StateContactInput,
   TeamLeader,
   TeamLeaderInput,
+  TruckInput,
   TruckState
 } from './api.schemas';
 
@@ -1892,6 +1893,147 @@ export const useVerifyManagerPassword = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getVerifyManagerPasswordMutationOptions(options));
+    }
+
+export const getAddTruckUrl = () => {
+
+
+
+
+  return `/api/settings/trucks`
+}
+
+/**
+ * @summary Add a manually-registered truck
+ */
+export const addTruck = async (truckInput: TruckInput, options?: RequestInit): Promise<TruckState> => {
+
+  return customFetch<TruckState>(getAddTruckUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      truckInput,)
+  }
+);}
+
+
+
+
+export const getAddTruckMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addTruck>>, TError,{data: BodyType<TruckInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof addTruck>>, TError,{data: BodyType<TruckInput>}, TContext> => {
+
+const mutationKey = ['addTruck'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof addTruck>>, {data: BodyType<TruckInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  addTruck(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AddTruckMutationResult = NonNullable<Awaited<ReturnType<typeof addTruck>>>
+    export type AddTruckMutationBody = BodyType<TruckInput>
+    export type AddTruckMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Add a manually-registered truck
+ */
+export const useAddTruck = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addTruck>>, TError,{data: BodyType<TruckInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof addTruck>>,
+        TError,
+        {data: BodyType<TruckInput>},
+        TContext
+      > => {
+      return useMutation(getAddTruckMutationOptions(options));
+    }
+
+export const getDeleteTruckUrl = (deviceId: string,) => {
+
+
+
+
+  return `/api/settings/trucks/${deviceId}`
+}
+
+/**
+ * @summary Delete a manually-added truck
+ */
+export const deleteTruck = async (deviceId: string, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteTruckUrl(deviceId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteTruckMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteTruck>>, TError,{deviceId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteTruck>>, TError,{deviceId: string}, TContext> => {
+
+const mutationKey = ['deleteTruck'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteTruck>>, {deviceId: string}> = (props) => {
+          const {deviceId} = props ?? {};
+
+          return  deleteTruck(deviceId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteTruckMutationResult = NonNullable<Awaited<ReturnType<typeof deleteTruck>>>
+
+    export type DeleteTruckMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Delete a manually-added truck
+ */
+export const useDeleteTruck = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteTruck>>, TError,{deviceId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteTruck>>,
+        TError,
+        {deviceId: string},
+        TContext
+      > => {
+      return useMutation(getDeleteTruckMutationOptions(options));
     }
 
 export const getListTruckStatesUrl = () => {

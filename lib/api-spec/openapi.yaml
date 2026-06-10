@@ -548,6 +548,40 @@ paths:
               schema:
                 $ref: "#/components/schemas/PasswordVerifyResult"
 
+  /settings/trucks:
+    post:
+      operationId: addTruck
+      tags: [settings]
+      summary: Add a manually-registered truck
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TruckInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TruckState"
+
+  /settings/trucks/{device_id}:
+    delete:
+      operationId: deleteTruck
+      tags: [settings]
+      summary: Delete a manually-added truck
+      parameters:
+        - name: device_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
   /settings/truck-states:
     get:
       operationId: listTruckStates
@@ -1055,6 +1089,13 @@ components:
         period_id:
           type: integer
           nullable: true
+
+    TruckInput:
+      type: object
+      required: [display_name]
+      properties:
+        display_name:
+          type: string
 
     TruckState:
       type: object

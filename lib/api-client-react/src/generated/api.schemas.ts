@@ -207,6 +207,10 @@ export interface ReportRow {
   period_id?: number | null;
 }
 
+export interface TruckInput {
+  display_name: string;
+}
+
 export interface TruckState {
   device_id: string;
   device_name: string;

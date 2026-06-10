@@ -44,6 +44,34 @@ router.put("/truck-states", async (req, res) => {
   }
 });
 
+// Add a manually-registered truck (device_id prefix: "manual-")
+router.post("/trucks", async (req, res) => {
+  const { display_name } = req.body as { display_name?: string };
+  if (!display_name?.trim()) {
+    res.status(400).json({ error: "display_name is required" });
+    return;
+  }
+  const device_id = `manual-${Date.now()}`;
+  await pool.query(
+    `INSERT INTO truck_states (device_id, device_name, state_code)
+     VALUES ($1, $2, '')
+     ON CONFLICT (device_id) DO NOTHING`,
+    [device_id, display_name.trim()]
+  );
+  res.status(201).json({ device_id, device_name: display_name.trim(), state_code: "" });
+});
+
+// Delete a manually-registered truck (only manual- prefixed IDs)
+router.delete("/trucks/:device_id", async (req, res) => {
+  const { device_id } = req.params;
+  if (!device_id.startsWith("manual-")) {
+    res.status(400).json({ error: "Only manually-added trucks can be deleted" });
+    return;
+  }
+  await pool.query("DELETE FROM truck_states WHERE device_id = $1", [device_id]);
+  res.status(204).end();
+});
+
 // ── Project States ──────────────────────────────────────────────────────────
 
 router.get("/project-states", async (_req, res) => {

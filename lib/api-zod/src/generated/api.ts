@@ -403,6 +403,22 @@ export const VerifyManagerPasswordResponse = zod.object({
 
 
 /**
+ * @summary Add a manually-registered truck
+ */
+export const AddTruckBody = zod.object({
+  "display_name": zod.string()
+})
+
+
+/**
+ * @summary Delete a manually-added truck
+ */
+export const DeleteTruckParams = zod.object({
+  "device_id": zod.coerce.string()
+})
+
+
+/**
  * @summary List truck state assignments
  */
 export const ListTruckStatesResponseItem = zod.object({

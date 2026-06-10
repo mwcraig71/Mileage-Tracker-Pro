@@ -40,4 +40,5 @@ export * from './stateContact';
 export * from './stateContactInput';
 export * from './teamLeader';
 export * from './teamLeaderInput';
+export * from './truckInput';
 export * from './truckState';
