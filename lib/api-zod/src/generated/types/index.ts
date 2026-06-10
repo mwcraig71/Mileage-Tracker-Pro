@@ -8,6 +8,7 @@
 
 export * from './alertCheckResult';
 export * from './alertCheckResultDetailsItem';
+export * from './alertConfig';
 export * from './annotation';
 export * from './annotationInput';
 export * from './annotationUpdate';

@@ -1,96 +1,202 @@
 import cron from "node-cron";
 import { Pool } from "pg";
 import { logger } from "./lib/logger";
+import { sendAlertEmail } from "./lib/email";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+
+const BASE_URL = "https://track.onestepgps.com/v3/api/public";
+const METERS_PER_MILE = 1609.344;
+
+function metersToMiles(m: number) {
+  return Math.round((m / METERS_PER_MILE) * 10) / 10;
+}
+
+/** Returns today's date as YYYY-MM-DD in server local time. */
+function getTodayLocal(): string {
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
 
 export interface CheckResult {
   checked_date: string;
   trucks_with_movement: number;
   alerts_inserted: number;
+  emails_sent: number;
   details: Array<{ device_id: string; device_name: string; issue: string }>;
 }
 
 /**
- * Core accountability check logic.
- * Looks at yesterday's GPS cache, cross-references driver_sessions,
- * and inserts daily_alerts for any truck with unaccounted movement.
+ * Query the OneStep GPS API for today's movement for all active trucks.
+ * Returns trucks that have driven any miles since midnight today.
+ * NOTE: no `sort` param — adding sort to device-point calls causes 502.
+ */
+async function fetchTodayMovingTrucks(): Promise<
+  Array<{ device_id: string; device_name: string; miles: number }>
+> {
+  const apiKey = process.env.ONESTEP_GPS_API_KEY;
+  if (!apiKey) {
+    logger.warn("ONESTEP_GPS_API_KEY not set — skipping GPS check");
+    return [];
+  }
+
+  const todayStr = getTodayLocal();
+  const dtFrom = new Date(todayStr);
+  dtFrom.setHours(0, 0, 0, 0);
+  const dtTo = new Date(); // now
+
+  // Fetch all GPS devices
+  const devResp = await fetch(`${BASE_URL}/device?api-key=${apiKey}`);
+  if (!devResp.ok) {
+    logger.error("Failed to fetch GPS devices during accountability check");
+    return [];
+  }
+  const devData = (await devResp.json()) as { result_list: unknown[] };
+  const devices = (devData.result_list ?? []) as Array<{
+    device_id: string;
+    display_name: string;
+  }>;
+
+  const moving: Array<{ device_id: string; device_name: string; miles: number }> = [];
+
+  for (const device of devices) {
+    try {
+      const url =
+        `${BASE_URL}/device-point?api-key=${apiKey}` +
+        `&device_id=${device.device_id}` +
+        `&dt_server_from=${dtFrom.toISOString()}` +
+        `&dt_server_to=${dtTo.toISOString()}` +
+        `&limit=5000`;
+
+      const ptResp = await fetch(url);
+      if (!ptResp.ok) continue;
+
+      const ptData = (await ptResp.json()) as { result_list: unknown[] };
+      const points = ((ptData.result_list ?? []) as any[]).slice().sort(
+        (a, b) => (a.dt_tracker ?? "").localeCompare(b.dt_tracker ?? "")
+      );
+
+      let firstOdo: number | null = null;
+      let lastOdo: number | null = null;
+      for (const p of points) {
+        const odo = p.device_point_detail?.vbus_odometer?.value;
+        if (odo == null || odo === 0) continue;
+        if (firstOdo === null) firstOdo = odo;
+        lastOdo = odo;
+      }
+
+      if (firstOdo !== null && lastOdo !== null) {
+        const miles = Math.max(0, metersToMiles(lastOdo - firstOdo));
+        if (miles > 0) {
+          moving.push({
+            device_id:   device.device_id,
+            device_name: device.display_name ?? device.device_id,
+            miles,
+          });
+        }
+      }
+    } catch (err) {
+      logger.warn({ err, device_id: device.device_id }, "GPS fetch failed for device");
+    }
+  }
+
+  return moving;
+}
+
+/**
+ * Core accountability check.
+ * Fetches today's GPS movement, cross-references driver_sessions,
+ * upserts daily_alerts, and emails affected state contacts.
  */
 export async function runAccountabilityCheck(): Promise<CheckResult> {
+  const checkedDate = getTodayLocal();
+  const movingTrucks = await fetchTodayMovingTrucks();
+
   const client = await pool.connect();
   try {
-    // Yesterday's date in local server time (YYYY-MM-DD)
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const checkedDate = yesterday.toISOString().slice(0, 10);
-
-    // 1. Find all trucks that moved yesterday (gps_miles > 0 in cache)
-    const cacheResult = await client.query(
-      `SELECT device_id, device_name, gps_miles
-       FROM gps_cache
-       WHERE date = $1 AND gps_miles > 0`,
-      [checkedDate]
-    );
-
-    const movingTrucks = cacheResult.rows as Array<{
-      device_id: string;
-      device_name: string;
-      gps_miles: number;
-    }>;
-
     const details: CheckResult["details"] = [];
     let alertsInserted = 0;
+    let emailsSent = 0;
 
     for (const truck of movingTrucks) {
-      // 2. Check for driver sessions on that date for this truck
-      const sessionResult = await client.query(
-        `SELECT id, project_number
+      // Deterministic session check: aggregate all sessions for this truck today.
+      // A truck is OK if at least one session has a non-empty project_number.
+      const sessionResult = await client.query<{
+        session_count: string;
+        has_project: boolean;
+      }>(
+        `SELECT
+           COUNT(*) AS session_count,
+           BOOL_OR(project_number IS NOT NULL AND project_number <> '') AS has_project
          FROM driver_sessions
          WHERE device_id = $1
-           AND started_at::date = $2::date
-         LIMIT 1`,
+           AND started_at::date = $2::date`,
         [truck.device_id, checkedDate]
       );
 
-      const session = sessionResult.rows[0] as
-        | { id: number; project_number: string | null }
-        | undefined;
+      const { session_count, has_project } = sessionResult.rows[0];
+      const count = parseInt(session_count, 10);
 
       let issue: "no_session" | "no_project" | null = null;
-
-      if (!session) {
+      if (count === 0) {
         issue = "no_session";
-      } else if (!session.project_number?.trim()) {
+      } else if (!has_project) {
         issue = "no_project";
       }
 
-      if (issue) {
-        const insertResult = await client.query(
-          `INSERT INTO daily_alerts (alert_date, device_id, device_name, issue)
-           VALUES ($1, $2, $3, $4)
-           ON CONFLICT (alert_date, device_id, issue) DO NOTHING`,
-          [checkedDate, truck.device_id, truck.device_name, issue]
+      if (!issue) continue;
+
+      const insertResult = await client.query(
+        `INSERT INTO daily_alerts (alert_date, device_id, device_name, issue)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (alert_date, device_id, issue) DO NOTHING`,
+        [checkedDate, truck.device_id, truck.device_name, issue]
+      );
+
+      const inserted = (insertResult.rowCount ?? 0) > 0;
+      if (inserted) alertsInserted++;
+
+      details.push({ device_id: truck.device_id, device_name: truck.device_name, issue });
+
+      // Email state contacts for this truck (only on newly inserted alerts)
+      if (inserted) {
+        const contactsResult = await client.query<{
+          contact_name: string;
+          email: string;
+        }>(
+          `SELECT sc.contact_name, sc.email
+           FROM truck_states ts
+           JOIN state_contacts sc ON sc.state_code = ts.state_code
+           WHERE ts.device_id = $1`,
+          [truck.device_id]
         );
-        if (insertResult.rowCount && insertResult.rowCount > 0) {
-          alertsInserted++;
+
+        for (const contact of contactsResult.rows) {
+          await sendAlertEmail({
+            to:          contact.email,
+            contactName: contact.contact_name,
+            truckName:   truck.device_name,
+            alertDate:   checkedDate,
+            issue,
+          });
+          emailsSent++;
         }
-        details.push({
-          device_id:   truck.device_id,
-          device_name: truck.device_name,
-          issue,
-        });
       }
     }
 
     logger.info(
-      { checkedDate, trucksWithMovement: movingTrucks.length, alertsInserted },
+      { checkedDate, trucksWithMovement: movingTrucks.length, alertsInserted, emailsSent },
       "Accountability check complete"
     );
 
     return {
-      checked_date:          checkedDate,
-      trucks_with_movement:  movingTrucks.length,
-      alerts_inserted:       alertsInserted,
+      checked_date:         checkedDate,
+      trucks_with_movement: movingTrucks.length,
+      alerts_inserted:      alertsInserted,
+      emails_sent:          emailsSent,
       details,
     };
   } finally {
@@ -98,20 +204,54 @@ export async function runAccountabilityCheck(): Promise<CheckResult> {
   }
 }
 
-/**
- * Start the daily 10 AM cron job.
- * Call this once after migrations complete.
- */
-export function startScheduler(): void {
-  // Runs every day at 10:00 AM server time
-  cron.schedule("0 10 * * *", async () => {
-    logger.info("Running daily accountability check (scheduled)");
+// ── Dynamic scheduler ─────────────────────────────────────────────────────────
+
+let currentTask: ReturnType<typeof cron.schedule> | null = null;
+
+function parseCronTime(hhmm: string): string {
+  const [h, m] = hhmm.split(":").map(s => parseInt(s, 10));
+  const hour   = isNaN(h) ? 10 : Math.max(0, Math.min(23, h));
+  const minute = isNaN(m) ? 0  : Math.max(0, Math.min(59, m));
+  return `${minute} ${hour} * * *`;
+}
+
+function scheduleAt(hhmm: string): void {
+  if (currentTask) {
+    currentTask.stop();
+    currentTask = null;
+  }
+  const expr = parseCronTime(hhmm);
+  currentTask = cron.schedule(expr, async () => {
+    logger.info({ checkTime: hhmm }, "Running daily accountability check (scheduled)");
     try {
       await runAccountabilityCheck();
     } catch (err) {
       logger.error({ err }, "Scheduled accountability check failed");
     }
   });
+  logger.info({ checkTime: hhmm, cronExpr: expr }, "Accountability check scheduled");
+}
 
-  logger.info("Daily accountability check scheduled for 10:00 AM");
+/** Read check_time from DB, then start the cron. */
+export async function startScheduler(): Promise<void> {
+  try {
+    const result = await pool.query<{ value: string }>(
+      `SELECT value FROM app_settings WHERE key = 'check_time'`
+    );
+    const time = result.rows[0]?.value ?? "10:00";
+    scheduleAt(time);
+  } catch (err) {
+    logger.error({ err }, "Failed to read check_time from DB; defaulting to 10:00");
+    scheduleAt("10:00");
+  }
+}
+
+/** Update check_time in DB and reschedule the cron. */
+export async function updateSchedulerTime(hhmm: string): Promise<void> {
+  await pool.query(
+    `INSERT INTO app_settings (key, value) VALUES ('check_time', $1)
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+    [hhmm]
+  );
+  scheduleAt(hhmm);
 }

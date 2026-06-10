@@ -254,6 +254,11 @@ export interface DailyAlert {
   created_at: string;
 }
 
+export interface AlertConfig {
+  /** Daily check time in HH:MM (24-hour) format, e.g. '10:00' */
+  check_time: string;
+}
+
 export type AlertCheckResultDetailsItem = {
   device_id: string;
   device_name: string;
@@ -264,6 +269,7 @@ export interface AlertCheckResult {
   checked_date: string;
   trucks_with_movement: number;
   alerts_inserted: number;
+  emails_sent: number;
   details: AlertCheckResultDetailsItem[];
 }
 

@@ -499,6 +499,26 @@ export const DeleteStateContactParams = zod.object({
 
 
 /**
+ * @summary Get alert schedule configuration
+ */
+export const GetAlertConfigResponse = zod.object({
+  "check_time": zod.string().describe('Daily check time in HH:MM (24-hour) format, e.g. \'10:00\'')
+})
+
+
+/**
+ * @summary Update alert schedule configuration
+ */
+export const UpdateAlertConfigBody = zod.object({
+  "check_time": zod.string().describe('Daily check time in HH:MM (24-hour) format, e.g. \'10:00\'')
+})
+
+export const UpdateAlertConfigResponse = zod.object({
+  "check_time": zod.string().describe('Daily check time in HH:MM (24-hour) format, e.g. \'10:00\'')
+})
+
+
+/**
  * @summary List unresolved daily accountability alerts (last 7 days)
  */
 export const ListAlertsResponseItem = zod.object({
@@ -520,6 +540,7 @@ export const TriggerAlertCheckResponse = zod.object({
   "checked_date": zod.string(),
   "trucks_with_movement": zod.number(),
   "alerts_inserted": zod.number(),
+  "emails_sent": zod.number(),
   "details": zod.array(zod.object({
   "device_id": zod.string(),
   "device_name": zod.string(),

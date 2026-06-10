@@ -143,4 +143,30 @@ router.delete("/state-contacts/:id", async (req, res) => {
   res.status(204).end();
 });
 
+// ── Alert schedule config ────────────────────────────────────────────────────
+
+router.get("/alert-config", async (_req, res) => {
+  const result = await pool.query<{ value: string }>(
+    `SELECT value FROM app_settings WHERE key = 'check_time'`
+  );
+  const check_time = result.rows[0]?.value ?? "10:00";
+  res.json({ check_time });
+});
+
+router.put("/alert-config", async (req, res) => {
+  const { check_time } = req.body as { check_time?: string };
+  if (typeof check_time !== "string" || !/^\d{1,2}:\d{2}$/.test(check_time)) {
+    res.status(400).json({ error: "check_time must be HH:MM format" });
+    return;
+  }
+  await pool.query(
+    `INSERT INTO app_settings (key, value) VALUES ('check_time', $1)
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+    [check_time]
+  );
+  const { updateSchedulerTime } = await import("../scheduler");
+  await updateSchedulerTime(check_time);
+  res.json({ check_time });
+});
+
 export default router;

@@ -18,8 +18,8 @@ if (Number.isNaN(port) || port <= 0) {
 }
 
 runMigrations()
+  .then(() => startScheduler())
   .then(() => {
-    startScheduler();
     app.listen(port, (err) => {
       if (err) {
         logger.error({ err }, "Error listening on port");

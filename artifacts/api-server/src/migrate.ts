@@ -209,6 +209,18 @@ export async function runMigrations(): Promise<void> {
       )
     `);
 
+    // ── App settings (key-value config) ──────────────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS app_settings (
+        key   TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      )
+    `);
+    await client.query(`
+      INSERT INTO app_settings (key, value) VALUES ('check_time', '10:00')
+      ON CONFLICT (key) DO NOTHING
+    `);
+
     // ── Daily alerts table ────────────────────────────────────────────────────
     await client.query(`
       CREATE TABLE IF NOT EXISTS daily_alerts (

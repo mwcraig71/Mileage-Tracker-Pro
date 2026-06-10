@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import {
   Truck, Settings, ArrowLeft, Save, Plus, Trash2, Loader2,
-  MapPin, Mail, Users, CheckCircle2, AlertTriangle,
+  MapPin, Mail, Users, CheckCircle2, AlertTriangle, Clock,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,9 @@ import {
   useCreateStateContact,
   useDeleteStateContact,
   getListStateContactsQueryKey,
+  useGetAlertConfig,
+  useUpdateAlertConfig,
+  getGetAlertConfigQueryKey,
   type TruckState,
   type ProjectState,
 } from "@workspace/api-client-react";

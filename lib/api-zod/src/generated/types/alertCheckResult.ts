@@ -11,5 +11,6 @@ export interface AlertCheckResult {
   checked_date: string;
   trucks_with_movement: number;
   alerts_inserted: number;
+  emails_sent: number;
   details: AlertCheckResultDetailsItem[];
 }

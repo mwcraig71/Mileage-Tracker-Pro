@@ -705,6 +705,42 @@ paths:
         "204":
           description: Deleted
 
+  /settings/alert-config:
+    get:
+      operationId: getAlertConfig
+      tags: [settings]
+      summary: Get alert schedule configuration
+      responses:
+        "200":
+          description: Alert config
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertConfig"
+    put:
+      operationId: updateAlertConfig
+      tags: [settings]
+      summary: Update alert schedule configuration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AlertConfig"
+      responses:
+        "200":
+          description: Updated alert config
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertConfig"
+        "400":
+          description: Invalid time format
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /alerts:
     get:
       operationId: listAlerts
@@ -1231,15 +1267,25 @@ components:
         created_at:
           type: string
 
+    AlertConfig:
+      type: object
+      required: [check_time]
+      properties:
+        check_time:
+          type: string
+          description: "Daily check time in HH:MM (24-hour) format, e.g. '10:00'"
+
     AlertCheckResult:
       type: object
-      required: [checked_date, trucks_with_movement, alerts_inserted, details]
+      required: [checked_date, trucks_with_movement, alerts_inserted, emails_sent, details]
       properties:
         checked_date:
           type: string
         trucks_with_movement:
           type: integer
         alerts_inserted:
+          type: integer
+        emails_sent:
           type: integer
         details:
           type: array
