@@ -1237,9 +1237,9 @@ export default function Home() {
             <div className="h-4 w-px bg-white/10 mx-0.5" />
 
             <Button variant="ghost" size="sm" onClick={() => navigate("/settings")}
-              className="h-8 text-xs text-white/40 hover:text-white hover:bg-white/10"
-              title="Settings">
+              className="h-8 text-xs text-white/60 hover:text-white hover:bg-white/10 gap-1.5">
               <Settings className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Settings</span>
             </Button>
           </div>
         </div>
