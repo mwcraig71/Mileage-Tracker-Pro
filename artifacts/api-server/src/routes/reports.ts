@@ -18,8 +18,6 @@ router.get("/", async (req, res) => {
     const rawIds = req.query["device_ids[]"] ?? req.query["device_ids"];
     const device_ids = rawIds ? [rawIds].flat().filter(Boolean) as string[] : [];
 
-    // Build per-source filter fragments. Both parts of the UNION share $1/$2 (dates)
-    // and optionally $3 (device_ids array). Project/leader filters only apply to Part 1.
     const params: unknown[] = [from, to];
 
     let laDeviceFilter = "";
@@ -44,8 +42,8 @@ router.get("/", async (req, res) => {
       leaderFilter = `AND la.team_leader_name = $${params.length}`;
     }
 
-    // Part 1: annotated rows — log_annotations is the source of truth.
-    // begin_odometer / end_odometer / gps_miles are stored there when the user saves.
+    // Part 1: annotated rows from log_annotations (primary source)
+    // Includes annotation_id and period_id so the frontend can edit/split rows.
     const part1 = `
       SELECT
         la.device_id,
@@ -62,7 +60,9 @@ router.get("/", async (req, res) => {
         la.project_number,
         la.team_leader_name,
         la.is_exported,
-        la.split_index
+        la.split_index,
+        la.id                                                                  AS annotation_id,
+        la.period_id
       FROM log_annotations la
       WHERE la.date >= $1 AND la.date <= $2
         ${laDeviceFilter}
@@ -70,8 +70,8 @@ router.get("/", async (req, res) => {
         ${leaderFilter}
     `;
 
-    // Part 2: GPS-only rows from gps_cache that have no annotation at all.
-    // Only include when no project/leader filter is active (unannotated rows can't match those).
+    // Part 2: GPS-only rows from gps_cache (no annotation saved yet)
+    // Only include when no project/leader filter is active.
     const includePart2 = !project && !leader;
     const part2 = `
       SELECT
@@ -87,7 +87,9 @@ router.get("/", async (req, res) => {
         ''             AS project_number,
         ''             AS team_leader_name,
         false          AS is_exported,
-        0              AS split_index
+        0              AS split_index,
+        NULL           AS annotation_id,
+        NULL           AS period_id
       FROM gps_cache gc
       WHERE gc.date >= $1 AND gc.date <= $2
         ${gcDeviceFilter}
@@ -116,6 +118,8 @@ router.get("/", async (req, res) => {
       team_leader_name: r.team_leader_name,
       is_exported:      r.is_exported,
       split_index:      parseInt(r.split_index),
+      annotation_id:    r.annotation_id != null ? parseInt(r.annotation_id) : null,
+      period_id:        r.period_id      != null ? parseInt(r.period_id)     : null,
     })));
   } catch (err) {
     console.error("Reports query error:", err);

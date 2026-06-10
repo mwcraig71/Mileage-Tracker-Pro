@@ -203,6 +203,8 @@ export interface ReportRow {
   team_leader_name: string;
   is_exported: boolean;
   split_index: number;
+  annotation_id?: number | null;
+  period_id?: number | null;
 }
 
 export type GetMileageSummaryParams = {

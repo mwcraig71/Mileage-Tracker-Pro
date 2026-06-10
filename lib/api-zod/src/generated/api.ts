@@ -131,7 +131,9 @@ export const GetReportsResponseItem = zod.object({
   "project_number": zod.string(),
   "team_leader_name": zod.string(),
   "is_exported": zod.boolean(),
-  "split_index": zod.number()
+  "split_index": zod.number(),
+  "annotation_id": zod.number().nullish(),
+  "period_id": zod.number().nullish()
 })
 export const GetReportsResponse = zod.array(GetReportsResponseItem)
 

@@ -1,13 +1,21 @@
 import { useState, useMemo } from "react";
 import { format, startOfMonth, endOfMonth, subMonths } from "date-fns";
-import { BarChart2, Download, Printer, ChevronDown, Check, Filter, ArrowLeft, X, Loader2 } from "lucide-react";
+import {
+  BarChart2, Download, Printer, ChevronDown, Check, Filter, ArrowLeft, X,
+  Loader2, Pencil, Scissors, Plus, Save,
+} from "lucide-react";
 import { Link } from "wouter";
 import {
   useGetReports,
   useGetGpsDevices,
   useListProjects,
   useListTeamLeaders,
+  useUpdateAnnotation,
+  useUpsertAnnotation,
+  useDeleteAnnotation,
+  getGetReportsQueryKey,
 } from "@workspace/api-client-react";
+import type { ReportRow } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,24 +25,95 @@ import {
 } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
 
-const now = new Date();
+/* ── Types ──────────────────────────────────────────────────────────── */
+interface EditRow {
+  project: string;
+  leader: string;
+  indirect: string;
+  personal: string;
+  direct: string;
+}
+
+const blankEdit = (): EditRow => ({
+  project: "", leader: "", indirect: "", personal: "", direct: "",
+});
+
+const rowKey  = (row: ReportRow) => `${row.device_id}_${row.date}_${row.split_index}`;
+const groupKey = (row: ReportRow) => `${row.device_id}_${row.date}`;
+
+/* ── Constants ──────────────────────────────────────────────────────── */
+const now        = new Date();
 const DEFAULT_FROM = format(startOfMonth(subMonths(now, 2)), "yyyy-MM-dd");
-const DEFAULT_TO   = format(endOfMonth(subMonths(now, 1)), "yyyy-MM-dd");
+const DEFAULT_TO   = format(endOfMonth(subMonths(now, 1)),   "yyyy-MM-dd");
 
+/* ── Tiny inline number input ───────────────────────────────────────── */
+function MilesInput({
+  value, onChange, color,
+}: { value: string; onChange: (v: string) => void; color: string }) {
+  return (
+    <input
+      type="number"
+      min={0}
+      step={0.1}
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      className={cn(
+        "w-20 h-7 rounded px-1.5 text-right text-xs font-mono bg-white/5 border border-white/10",
+        "focus:outline-none focus:border-white/30",
+        color,
+      )}
+    />
+  );
+}
+
+/* ── Tiny inline text input ─────────────────────────────────────────── */
+function TextInput({
+  value, onChange, list, placeholder,
+}: {
+  value: string; onChange: (v: string) => void;
+  list?: string; placeholder?: string;
+}) {
+  return (
+    <input
+      type="text"
+      list={list}
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      placeholder={placeholder}
+      className="w-28 h-7 rounded px-1.5 text-xs bg-white/5 border border-white/10 focus:outline-none focus:border-white/30 text-white"
+    />
+  );
+}
+
+/* ════════════════════════════════════════════════════════════════════ */
 export default function Reports() {
-  const [dateFrom, setDateFrom]             = useState(DEFAULT_FROM);
-  const [dateTo, setDateTo]                 = useState(DEFAULT_TO);
-  const [selectedIds, setSelectedIds]       = useState<string[]>([]);
-  const [projectFilter, setProjectFilter]   = useState("");
-  const [leaderFilter, setLeaderFilter]     = useState("");
-  const [submitted, setSubmitted]           = useState(false);
-  const [deviceOpen, setDeviceOpen]         = useState(false);
-  const [projectOpen, setProjectOpen]       = useState(false);
-  const [leaderOpen, setLeaderOpen]         = useState(false);
 
-  const { data: devices = [] }     = useGetGpsDevices();
-  const { data: projects = [] }    = useListProjects();
+  /* Filter state */
+  const [dateFrom, setDateFrom]       = useState(DEFAULT_FROM);
+  const [dateTo, setDateTo]           = useState(DEFAULT_TO);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [projectFilter, setProjectFilter] = useState("");
+  const [leaderFilter, setLeaderFilter]   = useState("");
+  const [submitted, setSubmitted]     = useState(false);
+  const [deviceOpen, setDeviceOpen]   = useState(false);
+  const [projectOpen, setProjectOpen] = useState(false);
+  const [leaderOpen, setLeaderOpen]   = useState(false);
+
+  /* Edit / split state */
+  const [editMode,      setEditMode]      = useState<Set<string>>(new Set());
+  const [localEdits,    setLocalEdits]    = useState<Record<string, EditRow>>({});
+  const [pendingSplits, setPendingSplits] = useState<Record<string, EditRow[]>>({});
+  const [savingKeys,    setSavingKeys]    = useState<Set<string>>(new Set());
+  const [deletingIds,   setDeletingIds]   = useState<Set<number>>(new Set());
+
+  /* Data hooks */
+  const { data: devices     = [] } = useGetGpsDevices();
+  const { data: projects    = [] } = useListProjects();
   const { data: teamLeaders = [] } = useListTeamLeaders();
+
+  const updateAnnotationM = useUpdateAnnotation();
+  const upsertAnnotationM = useUpsertAnnotation();
+  const deleteAnnotationM = useDeleteAnnotation();
 
   const params = {
     from: dateFrom,
@@ -44,19 +123,162 @@ export default function Reports() {
     ...(leaderFilter  ? { leader:  leaderFilter  } : {}),
   };
 
-  const { data: rows = [], isFetching } = useGetReports(params, {
-    query: { enabled: submitted && !!dateFrom && !!dateTo },
+  const { data: rows = [], isFetching, refetch } = useGetReports(params, {
+    query: {
+      enabled: submitted && !!dateFrom && !!dateTo,
+      queryKey: getGetReportsQueryKey(params),
+    },
   });
 
+  /* ── Build display list interleaving rows + pending splits ────────── */
+  type DisplayItem =
+    | { kind: "row";     row: ReportRow }
+    | { kind: "pending"; parentRow: ReportRow; idx: number };
+
+  const displayList = useMemo<DisplayItem[]>(() => {
+    if (!rows.length) return [];
+    const lastIdxForGroup: Record<string, number> = {};
+    rows.forEach((r, i) => { lastIdxForGroup[groupKey(r)] = i; });
+
+    const items: DisplayItem[] = [];
+    rows.forEach((row, i) => {
+      items.push({ kind: "row", row });
+      if (lastIdxForGroup[groupKey(row)] === i) {
+        const gk = groupKey(row);
+        (pendingSplits[gk] ?? []).forEach((_, idx) =>
+          items.push({ kind: "pending", parentRow: row, idx }),
+        );
+      }
+    });
+    return items;
+  }, [rows, pendingSplits]);
+
+  /* ── Totals ──────────────────────────────────────────────────────── */
   const totals = useMemo(() => ({
-    gps:      rows.reduce((s, r) => s + (r.gps_miles ?? 0),  0),
-    indirect: rows.reduce((s, r) => s + r.indirect_miles,    0),
-    personal: rows.reduce((s, r) => s + r.personal_miles,    0),
-    direct:   rows.reduce((s, r) => s + r.direct_miles,      0),
+    gps:      rows.reduce((s, r) => s + (r.gps_miles ?? 0), 0),
+    indirect: rows.reduce((s, r) => s + r.indirect_miles,   0),
+    personal: rows.reduce((s, r) => s + r.personal_miles,   0),
+    direct:   rows.reduce((s, r) => s + r.direct_miles,     0),
   }), [rows]);
 
-  const handleRunReport = () => setSubmitted(true);
+  /* ── Edit helpers ─────────────────────────────────────────────────── */
+  const startEdit = (row: ReportRow) => {
+    const key = rowKey(row);
+    setEditMode(prev => new Set([...prev, key]));
+    setLocalEdits(prev => ({
+      ...prev,
+      [key]: {
+        project:  row.project_number   ?? "",
+        leader:   row.team_leader_name ?? "",
+        indirect: row.indirect_miles > 0 ? String(row.indirect_miles) : "",
+        personal: row.personal_miles > 0 ? String(row.personal_miles) : "",
+        direct:   row.direct_miles   > 0 ? String(row.direct_miles)   : "",
+      },
+    }));
+  };
 
+  const cancelEdit = (key: string) => {
+    setEditMode(prev => { const s = new Set(prev); s.delete(key); return s; });
+    setLocalEdits(prev => { const c = { ...prev }; delete c[key]; return c; });
+  };
+
+  const patchEdit = (key: string, patch: Partial<EditRow>) =>
+    setLocalEdits(prev => ({ ...prev, [key]: { ...prev[key], ...patch } }));
+
+  const saveEdit = async (row: ReportRow) => {
+    const key  = rowKey(row);
+    const edit = localEdits[key];
+    if (!edit || !row.annotation_id) return;
+    setSavingKeys(prev => new Set([...prev, key]));
+    try {
+      await updateAnnotationM.mutateAsync({
+        id: row.annotation_id,
+        data: {
+          project_number:   edit.project,
+          team_leader_name: edit.leader,
+          indirect_miles:   parseFloat(edit.indirect) || 0,
+          personal_miles:   parseFloat(edit.personal) || 0,
+          direct_miles:     parseFloat(edit.direct)   || 0,
+        },
+      });
+      cancelEdit(key);
+      await refetch();
+    } finally {
+      setSavingKeys(prev => { const s = new Set(prev); s.delete(key); return s; });
+    }
+  };
+
+  /* ── Delete split ────────────────────────────────────────────────── */
+  const deleteSplit = async (row: ReportRow) => {
+    if (!row.annotation_id) return;
+    setDeletingIds(prev => new Set([...prev, row.annotation_id!]));
+    try {
+      await deleteAnnotationM.mutateAsync({ id: row.annotation_id });
+      await refetch();
+    } finally {
+      setDeletingIds(prev => { const s = new Set(prev); s.delete(row.annotation_id!); return s; });
+    }
+  };
+
+  /* ── Pending split helpers ───────────────────────────────────────── */
+  const addPendingSplit = (row: ReportRow) => {
+    const gk = groupKey(row);
+    setPendingSplits(prev => ({ ...prev, [gk]: [...(prev[gk] ?? []), blankEdit()] }));
+  };
+
+  const patchPending = (gk: string, idx: number, patch: Partial<EditRow>) =>
+    setPendingSplits(prev => {
+      const arr = [...(prev[gk] ?? [])];
+      arr[idx] = { ...arr[idx], ...patch };
+      return { ...prev, [gk]: arr };
+    });
+
+  const cancelPending = (gk: string, idx: number) =>
+    setPendingSplits(prev => {
+      const arr = [...(prev[gk] ?? [])];
+      arr.splice(idx, 1);
+      return { ...prev, [gk]: arr };
+    });
+
+  const savePending = async (parentRow: ReportRow, idx: number) => {
+    const gk   = groupKey(parentRow);
+    const edit = (pendingSplits[gk] ?? [])[idx];
+    if (!edit || !parentRow.period_id) return;
+
+    const existingForGroup = rows.filter(
+      r => r.device_id === parentRow.device_id && r.date === parentRow.date,
+    );
+    const maxIdx     = Math.max(...existingForGroup.map(r => r.split_index));
+    const newSplitIdx = maxIdx + 1 + idx;
+
+    const pendingKey = `${gk}_pending_${idx}`;
+    setSavingKeys(prev => new Set([...prev, pendingKey]));
+    try {
+      await upsertAnnotationM.mutateAsync({
+        data: {
+          period_id:        parentRow.period_id,
+          device_id:        parentRow.device_id,
+          device_name:      parentRow.device_name,
+          date:             parentRow.date,
+          split_index:      newSplitIdx,
+          begin_odometer:   null,
+          end_odometer:     null,
+          gps_miles:        null,
+          indirect_miles:   parseFloat(edit.indirect) || 0,
+          personal_miles:   parseFloat(edit.personal) || 0,
+          direct_miles:     parseFloat(edit.direct)   || 0,
+          project_number:   edit.project,
+          team_leader_name: edit.leader,
+        },
+      });
+      cancelPending(gk, idx);
+      await refetch();
+    } finally {
+      setSavingKeys(prev => { const s = new Set(prev); s.delete(pendingKey); return s; });
+    }
+  };
+
+  /* ── CSV export ───────────────────────────────────────────────────── */
   const handleExportCSV = () => {
     const headers = ["Date", "Vehicle", "GPS Miles", "Indirect", "Personal", "Direct", "Project", "Leader"];
     const csvRows = rows.map(r => [
@@ -80,10 +302,26 @@ export default function Reports() {
   };
 
   const toggleDevice = (id: string) =>
-    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+    setSelectedIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id],
+    );
 
+  /* ── Datalist ids ────────────────────────────────────────────────── */
+  const DL_PROJ   = "rpt-projects-dl";
+  const DL_LEADER = "rpt-leaders-dl";
+
+  /* ══════════════════════════════════════════════════════════════════ */
   return (
     <div className="min-h-screen bg-[#0d1117] text-white">
+
+      {/* Hidden datalists for autocomplete */}
+      <datalist id={DL_PROJ}>
+        {projects.map(p => <option key={p.id} value={p.project_number} />)}
+      </datalist>
+      <datalist id={DL_LEADER}>
+        {teamLeaders.map(l => <option key={l.id} value={l.name} />)}
+      </datalist>
+
       {/* Header */}
       <header className="border-b border-white/10 bg-[#0d1117]/90 backdrop-blur sticky top-0 z-10 print:hidden">
         <div className="container mx-auto max-w-7xl px-4 h-14 flex items-center gap-3">
@@ -131,6 +369,7 @@ export default function Reports() {
       <div className="container mx-auto max-w-7xl px-4 py-4 print:hidden">
         <div className="bg-[#161b22] border border-white/10 rounded-xl p-4">
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+
             {/* Date From */}
             <div className="space-y-1">
               <Label className="text-xs text-white/50">From</Label>
@@ -259,7 +498,7 @@ export default function Reports() {
 
             {/* Run */}
             <div className="flex items-end">
-              <Button size="sm" onClick={handleRunReport}
+              <Button size="sm" onClick={() => setSubmitted(true)}
                 disabled={!dateFrom || !dateTo || isFetching}
                 className="h-8 w-full text-xs bg-amber-500 hover:bg-amber-400 text-black font-semibold gap-1.5">
                 {isFetching
@@ -305,6 +544,7 @@ export default function Reports() {
 
       {/* Results */}
       <div className="container mx-auto max-w-7xl px-4 pb-8">
+
         {!submitted && (
           <div className="text-center py-20 text-white/25 text-sm">
             Set your filters and click <span className="text-amber-400/70">Run Report</span> to view data.
@@ -323,7 +563,6 @@ export default function Reports() {
             <p>No saved data found for <span className="text-white/50">{dateFrom}</span> – <span className="text-white/50">{dateTo}</span>.</p>
             <p className="text-xs text-white/20">
               Make sure the date range covers a period where annotations have been saved in the Mileage Log.
-              Try widening the date range, or open the Mileage Log tab to check which months have data.
             </p>
           </div>
         )}
@@ -333,68 +572,271 @@ export default function Reports() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-white/10 bg-white/[0.02] text-white/50 text-xs uppercase tracking-wide">
-                  <th className="py-2.5 px-4 text-left font-medium">Date</th>
-                  <th className="py-2.5 px-4 text-left font-medium">Vehicle</th>
-                  <th className="py-2.5 px-4 text-right font-medium">GPS Miles</th>
-                  <th className="py-2.5 px-4 text-right font-medium">Indirect</th>
-                  <th className="py-2.5 px-4 text-right font-medium">Personal</th>
-                  <th className="py-2.5 px-4 text-right font-medium">Direct</th>
-                  <th className="py-2.5 px-4 text-left font-medium">Project</th>
-                  <th className="py-2.5 px-4 text-left font-medium">Leader</th>
+                  <th className="py-2.5 px-3 text-left font-medium">Date</th>
+                  <th className="py-2.5 px-3 text-left font-medium">Vehicle</th>
+                  <th className="py-2.5 px-3 text-right font-medium">GPS Mi</th>
+                  <th className="py-2.5 px-3 text-right font-medium">Indirect</th>
+                  <th className="py-2.5 px-3 text-right font-medium">Personal</th>
+                  <th className="py-2.5 px-3 text-right font-medium">Direct</th>
+                  <th className="py-2.5 px-3 text-left font-medium">Project</th>
+                  <th className="py-2.5 px-3 text-left font-medium">Leader</th>
+                  <th className="py-2.5 px-3 text-center font-medium print:hidden">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map(row => (
-                  <tr
-                    key={`${row.device_id}_${row.date}_${row.split_index}`}
-                    className={cn(
-                      "border-b border-white/5 hover:bg-white/[0.025] transition-colors",
-                      row.split_index > 0 && "bg-blue-950/10",
-                    )}>
-                    <td className={cn("py-2 px-4 font-mono text-xs",
-                      row.split_index > 0 ? "text-transparent select-none" : "")}>
-                      {row.date}
-                    </td>
-                    <td className="py-2 px-4 text-xs">
-                      {row.split_index > 0
-                        ? <span className="text-white/35 ml-3">└ split {row.split_index}</span>
-                        : row.device_name}
-                    </td>
-                    <td className="py-2 px-4 text-right font-mono text-xs text-white/70">
-                      {row.split_index === 0 && row.gps_miles != null ? row.gps_miles.toFixed(1) : ""}
-                    </td>
-                    <td className="py-2 px-4 text-right font-mono text-xs text-amber-400/80">
-                      {row.indirect_miles > 0 ? row.indirect_miles.toFixed(1) : ""}
-                    </td>
-                    <td className="py-2 px-4 text-right font-mono text-xs text-purple-400/80">
-                      {row.personal_miles > 0 ? row.personal_miles.toFixed(1) : ""}
-                    </td>
-                    <td className="py-2 px-4 text-right font-mono text-xs text-emerald-400/80">
-                      {row.direct_miles > 0 ? row.direct_miles.toFixed(1) : ""}
-                    </td>
-                    <td className="py-2 px-4 text-xs text-white/80">{row.project_number}</td>
-                    <td className="py-2 px-4 text-xs text-white/80">{row.team_leader_name}</td>
-                  </tr>
-                ))}
+                {displayList.map(item => {
+
+                  /* ── Saved row ────────────────────────────────────── */
+                  if (item.kind === "row") {
+                    const { row } = item;
+                    const key     = rowKey(row);
+                    const inEdit  = editMode.has(key);
+                    const saving  = savingKeys.has(key);
+                    const deleting = row.annotation_id != null && deletingIds.has(row.annotation_id);
+                    const edit    = localEdits[key] ?? blankEdit();
+                    const isSplit = row.split_index > 0;
+                    const canEdit = row.annotation_id != null;
+
+                    return (
+                      <tr
+                        key={key}
+                        className={cn(
+                          "border-b border-white/5 transition-colors",
+                          isSplit ? "bg-blue-950/10 hover:bg-blue-950/20" : "hover:bg-white/[0.025]",
+                          inEdit  && "bg-white/[0.04]",
+                        )}
+                      >
+                        {/* Date */}
+                        <td className={cn("py-2 px-3 font-mono text-xs",
+                          isSplit ? "text-transparent select-none" : "")}>
+                          {row.date}
+                        </td>
+
+                        {/* Vehicle */}
+                        <td className="py-2 px-3 text-xs">
+                          {isSplit
+                            ? <span className="text-white/35 ml-3">└ split {row.split_index}</span>
+                            : row.device_name}
+                        </td>
+
+                        {/* GPS Miles (primary row only) */}
+                        <td className="py-2 px-3 text-right font-mono text-xs text-white/70">
+                          {!isSplit && row.gps_miles != null ? row.gps_miles.toFixed(1) : ""}
+                        </td>
+
+                        {/* Indirect */}
+                        <td className="py-2 px-3 text-right">
+                          {inEdit
+                            ? <MilesInput value={edit.indirect} color="text-amber-300"
+                                onChange={v => patchEdit(key, { indirect: v })} />
+                            : <span className="font-mono text-xs text-amber-400/80">
+                                {row.indirect_miles > 0 ? row.indirect_miles.toFixed(1) : ""}
+                              </span>}
+                        </td>
+
+                        {/* Personal */}
+                        <td className="py-2 px-3 text-right">
+                          {inEdit
+                            ? <MilesInput value={edit.personal} color="text-purple-300"
+                                onChange={v => patchEdit(key, { personal: v })} />
+                            : <span className="font-mono text-xs text-purple-400/80">
+                                {row.personal_miles > 0 ? row.personal_miles.toFixed(1) : ""}
+                              </span>}
+                        </td>
+
+                        {/* Direct */}
+                        <td className="py-2 px-3 text-right">
+                          {inEdit
+                            ? <MilesInput value={edit.direct} color="text-emerald-300"
+                                onChange={v => patchEdit(key, { direct: v })} />
+                            : <span className="font-mono text-xs text-emerald-400/80">
+                                {row.direct_miles > 0 ? row.direct_miles.toFixed(1) : ""}
+                              </span>}
+                        </td>
+
+                        {/* Project */}
+                        <td className="py-2 px-3 text-xs">
+                          {inEdit
+                            ? <TextInput value={edit.project} list={DL_PROJ}
+                                placeholder="Project #"
+                                onChange={v => patchEdit(key, { project: v })} />
+                            : <span className="text-white/80">{row.project_number}</span>}
+                        </td>
+
+                        {/* Leader */}
+                        <td className="py-2 px-3 text-xs">
+                          {inEdit
+                            ? <TextInput value={edit.leader} list={DL_LEADER}
+                                placeholder="Leader name"
+                                onChange={v => patchEdit(key, { leader: v })} />
+                            : <span className="text-white/80">{row.team_leader_name}</span>}
+                        </td>
+
+                        {/* Actions */}
+                        <td className="py-2 px-3 print:hidden">
+                          <div className="flex items-center justify-center gap-1">
+                            {inEdit ? (
+                              <>
+                                <button
+                                  onClick={() => saveEdit(row)}
+                                  disabled={saving}
+                                  title="Save"
+                                  className="p-1 rounded text-emerald-400 hover:bg-emerald-400/10 disabled:opacity-40 transition-colors">
+                                  {saving
+                                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    : <Save className="h-3.5 w-3.5" />}
+                                </button>
+                                <button
+                                  onClick={() => cancelEdit(key)}
+                                  disabled={saving}
+                                  title="Cancel"
+                                  className="p-1 rounded text-white/40 hover:bg-white/10 disabled:opacity-40 transition-colors">
+                                  <X className="h-3.5 w-3.5" />
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                {canEdit && (
+                                  <button
+                                    onClick={() => startEdit(row)}
+                                    title="Edit row"
+                                    className="p-1 rounded text-white/30 hover:text-amber-400 hover:bg-amber-400/10 transition-colors">
+                                    <Pencil className="h-3.5 w-3.5" />
+                                  </button>
+                                )}
+                                {/* Scissors: add split — only on primary annotated rows */}
+                                {!isSplit && canEdit && (
+                                  <button
+                                    onClick={() => addPendingSplit(row)}
+                                    title="Split mileage"
+                                    className="p-1 rounded text-white/30 hover:text-sky-400 hover:bg-sky-400/10 transition-colors">
+                                    <Scissors className="h-3.5 w-3.5" />
+                                  </button>
+                                )}
+                                {/* Delete: only on saved split rows */}
+                                {isSplit && canEdit && (
+                                  <button
+                                    onClick={() => deleteSplit(row)}
+                                    disabled={deleting}
+                                    title="Remove split"
+                                    className="p-1 rounded text-white/30 hover:text-red-400 hover:bg-red-400/10 disabled:opacity-40 transition-colors">
+                                    {deleting
+                                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                      : <X className="h-3.5 w-3.5" />}
+                                  </button>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  }
+
+                  /* ── Pending (new unsaved) split row ──────────────── */
+                  const { parentRow, idx } = item;
+                  const gk         = groupKey(parentRow);
+                  const pendingKey = `${gk}_pending_${idx}`;
+                  const savingP    = savingKeys.has(pendingKey);
+                  const pendEdit   = (pendingSplits[gk] ?? [])[idx] ?? blankEdit();
+
+                  return (
+                    <tr
+                      key={pendingKey}
+                      className="border-b border-white/5 bg-sky-950/20 hover:bg-sky-950/30 transition-colors"
+                    >
+                      {/* Date — blank */}
+                      <td className="py-2 px-3 text-transparent select-none text-xs font-mono">
+                        {parentRow.date}
+                      </td>
+
+                      {/* Vehicle label */}
+                      <td className="py-2 px-3 text-xs">
+                        <span className="text-sky-400/60 ml-3 flex items-center gap-1">
+                          <Plus className="h-3 w-3" />
+                          new split
+                        </span>
+                      </td>
+
+                      {/* GPS Miles — blank */}
+                      <td />
+
+                      {/* Indirect */}
+                      <td className="py-2 px-3 text-right">
+                        <MilesInput value={pendEdit.indirect} color="text-amber-300"
+                          onChange={v => patchPending(gk, idx, { indirect: v })} />
+                      </td>
+
+                      {/* Personal */}
+                      <td className="py-2 px-3 text-right">
+                        <MilesInput value={pendEdit.personal} color="text-purple-300"
+                          onChange={v => patchPending(gk, idx, { personal: v })} />
+                      </td>
+
+                      {/* Direct */}
+                      <td className="py-2 px-3 text-right">
+                        <MilesInput value={pendEdit.direct} color="text-emerald-300"
+                          onChange={v => patchPending(gk, idx, { direct: v })} />
+                      </td>
+
+                      {/* Project */}
+                      <td className="py-2 px-3">
+                        <TextInput value={pendEdit.project} list={DL_PROJ}
+                          placeholder="Project #"
+                          onChange={v => patchPending(gk, idx, { project: v })} />
+                      </td>
+
+                      {/* Leader */}
+                      <td className="py-2 px-3">
+                        <TextInput value={pendEdit.leader} list={DL_LEADER}
+                          placeholder="Leader name"
+                          onChange={v => patchPending(gk, idx, { leader: v })} />
+                      </td>
+
+                      {/* Actions */}
+                      <td className="py-2 px-3 print:hidden">
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            onClick={() => savePending(parentRow, idx)}
+                            disabled={savingP}
+                            title="Save split"
+                            className="p-1 rounded text-emerald-400 hover:bg-emerald-400/10 disabled:opacity-40 transition-colors">
+                            {savingP
+                              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              : <Save className="h-3.5 w-3.5" />}
+                          </button>
+                          <button
+                            onClick={() => cancelPending(gk, idx)}
+                            disabled={savingP}
+                            title="Cancel"
+                            className="p-1 rounded text-white/40 hover:bg-white/10 disabled:opacity-40 transition-colors">
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
+
               <tfoot>
                 <tr className="border-t border-white/20 bg-white/[0.04] text-xs font-semibold">
-                  <td className="py-2.5 px-4 text-white/40" colSpan={2}>
+                  <td className="py-2.5 px-3 text-white/40" colSpan={2}>
                     Totals — {rows.length} row{rows.length !== 1 ? "s" : ""}
                   </td>
-                  <td className="py-2.5 px-4 text-right font-mono text-white/70">
+                  <td className="py-2.5 px-3 text-right font-mono text-white/70">
                     {totals.gps.toFixed(1)}
                   </td>
-                  <td className="py-2.5 px-4 text-right font-mono text-amber-400/80">
+                  <td className="py-2.5 px-3 text-right font-mono text-amber-400/80">
                     {totals.indirect.toFixed(1)}
                   </td>
-                  <td className="py-2.5 px-4 text-right font-mono text-purple-400/80">
+                  <td className="py-2.5 px-3 text-right font-mono text-purple-400/80">
                     {totals.personal.toFixed(1)}
                   </td>
-                  <td className="py-2.5 px-4 text-right font-mono text-emerald-400/80">
+                  <td className="py-2.5 px-3 text-right font-mono text-emerald-400/80">
                     {totals.direct.toFixed(1)}
                   </td>
-                  <td colSpan={2} />
+                  <td colSpan={3} />
                 </tr>
               </tfoot>
             </table>

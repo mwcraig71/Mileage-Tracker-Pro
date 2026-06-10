@@ -941,3 +941,9 @@ components:
           type: boolean
         split_index:
           type: integer
+        annotation_id:
+          type: integer
+          nullable: true
+        period_id:
+          type: integer
+          nullable: true
