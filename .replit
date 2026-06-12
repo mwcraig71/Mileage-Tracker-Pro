@@ -38,6 +38,9 @@ externalPort = 3000
 [userenv]
 
 [userenv.shared]
+SMTP_HOST = "smtp.sendgrid.net"
+SMTP_PORT = "587"
+SMTP_USER = "apikey"
 
 [nix]
 channel = "stable-25_05"

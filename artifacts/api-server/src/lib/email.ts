@@ -5,7 +5,7 @@ function getTransporter() {
   const host = process.env.SMTP_HOST;
   const port = parseInt(process.env.SMTP_PORT ?? "587", 10);
   const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
+  const pass = process.env.SMTP_PASS ?? process.env.SENDGRID_API_KEY;
   const from = process.env.SMTP_FROM;
 
   if (!host || !user || !pass || !from) return null;
