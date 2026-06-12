@@ -578,7 +578,10 @@ export default function SettingsPage() {
           <div className="h-4 w-px bg-white/15 mx-1" />
           <div className="flex items-center gap-2 flex-1">
             <img src="/logo.png" alt="FleetLog" className="h-7 w-auto" />
-            <span className="text-xs text-white/30 font-mono hidden sm:inline">Settings</span>
+            <div className="hidden sm:block">
+              <div className="text-sm font-bold tracking-tight leading-none">FleetLog</div>
+              <div className="text-[10px] text-white/30 font-mono mt-0.5">Settings</div>
+            </div>
           </div>
           <Settings className="h-4 w-4 text-white/20" />
         </div>

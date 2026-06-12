@@ -27,6 +27,7 @@ import {
   useVerifyManagerPassword,
   useListAlerts,
   useDismissAlert,
+  useTriggerAlertCheck,
   getListAlertsQueryKey,
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -252,6 +253,7 @@ export default function Home() {
   const syncGpsCacheMut    = useSyncGpsCache();
   const { data: alerts = [] } = useListAlerts();
   const dismissAlertMut       = useDismissAlert();
+  const checkNowMut           = useTriggerAlertCheck();
 
   const { data: periodAnnotations } = useQuery({
     ...getListPeriodAnnotationsQueryOptions(activePeriodId ?? 0),
@@ -1209,7 +1211,10 @@ export default function Home() {
           {/* Logo */}
           <div className="flex items-center gap-2 shrink-0">
             <img src="/logo.png" alt="FleetLog" className="h-8 w-auto" />
-            <span className="text-xs text-white/30 font-mono hidden sm:block">Mileage Log</span>
+            <div className="hidden sm:block">
+              <div className="text-sm font-bold tracking-tight leading-none">FleetLog</div>
+              <div className="text-[10px] text-white/30 font-mono mt-0.5">Mileage Log</div>
+            </div>
           </div>
 
           {/* Period badge */}
@@ -1264,10 +1269,25 @@ export default function Home() {
               <span className="text-sm font-medium text-amber-300">
                 {alerts.length} unaccounted truck movement{alerts.length !== 1 ? "s" : ""} detected
               </span>
-              <span className="text-xs text-white/30 ml-1">
+              <span className="text-xs text-white/30 ml-1 hidden sm:inline">
                 — trucks moved yesterday with no driver or project on record
               </span>
-              <ChevronDown className={`h-3.5 w-3.5 text-white/30 ml-auto transition-transform ${alertsBannerExpanded ? "rotate-180" : ""}`} />
+              <button
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  await checkNowMut.mutateAsync();
+                  qc.invalidateQueries({ queryKey: getListAlertsQueryKey() });
+                }}
+                disabled={checkNowMut.isPending}
+                className="ml-auto mr-2 flex items-center gap-1.5 text-xs px-2.5 py-1 rounded bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Re-run the accountability check now"
+              >
+                {checkNowMut.isPending
+                  ? <Loader2 className="h-3 w-3 animate-spin" />
+                  : <Clock className="h-3 w-3" />}
+                Run Check Now
+              </button>
+              <ChevronDown className={`h-3.5 w-3.5 text-white/30 transition-transform ${alertsBannerExpanded ? "rotate-180" : ""}`} />
             </button>
 
             {alertsBannerExpanded && (
