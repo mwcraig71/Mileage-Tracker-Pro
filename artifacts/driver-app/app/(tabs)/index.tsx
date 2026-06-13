@@ -66,6 +66,7 @@ export default function ShiftScreen() {
   const [selectedDriver, setSelectedDriver]     = useState<string>("");
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
   const [selectedProject, setSelectedProject]   = useState<string>("");
+  const [driverEmail, setDriverEmail]           = useState<string>("");
   const [modalType, setModalType]               = useState<ModalType>(null);
   const [searchText, setSearchText]             = useState<string>("");
   const [errorMsg, setErrorMsg]                 = useState<string>("");
@@ -77,11 +78,12 @@ export default function ShiftScreen() {
   // ── Persistence ────────────────────────────────────────────────────────────
   // Load saved selections on mount
   useEffect(() => {
-    AsyncStorage.multiGet(["driver_app:driver", "driver_app:device_id", "driver_app:project"])
-      .then(([driverPair, devicePair, projectPair]) => {
+    AsyncStorage.multiGet(["driver_app:driver", "driver_app:device_id", "driver_app:project", "driver_app:email"])
+      .then(([driverPair, devicePair, projectPair, emailPair]) => {
         if (driverPair[1])  setSelectedDriver(driverPair[1]);
         if (devicePair[1])  setSelectedDeviceId(devicePair[1]);
         if (projectPair[1]) setSelectedProject(projectPair[1]);
+        if (emailPair[1])   setDriverEmail(emailPair[1]);
       })
       .catch(() => {});
   }, []);
@@ -100,6 +102,11 @@ export default function ShiftScreen() {
   useEffect(() => {
     AsyncStorage.setItem("driver_app:project", selectedProject).catch(() => {});
   }, [selectedProject]);
+
+  // Persist email whenever it changes
+  useEffect(() => {
+    AsyncStorage.setItem("driver_app:email", driverEmail).catch(() => {});
+  }, [driverEmail]);
 
   const { data: devices = [],     isLoading: devicesLoading  } = useGetGpsDevices();
   const { data: projects = [],    isLoading: projectsLoading, refetch: refetchProjects } = useListProjects();
@@ -288,6 +295,26 @@ export default function ShiftScreen() {
                 </View>
                 <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
               </TouchableOpacity>
+
+              {/* Email */}
+              <View style={[s.selectorCard, !!driverEmail && s.selectorCardActive]}>
+                <View style={[s.selectorIconBox, !!driverEmail && s.selectorIconBoxActive]}>
+                  <Feather name="mail" size={18} color={driverEmail ? colors.primary : colors.mutedForeground} />
+                </View>
+                <View style={s.selectorText}>
+                  <Text style={s.selectorHint}>Your Email</Text>
+                  <TextInput
+                    value={driverEmail}
+                    onChangeText={setDriverEmail}
+                    placeholder="Enter your email…"
+                    placeholderTextColor={colors.mutedForeground}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    style={[s.selectorVal, !driverEmail && s.selectorValEmpty, { flex: 1, padding: 0 }]}
+                  />
+                </View>
+              </View>
 
               {/* Truck */}
               <TouchableOpacity
