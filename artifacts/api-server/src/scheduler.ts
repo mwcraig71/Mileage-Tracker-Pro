@@ -1,24 +1,19 @@
 import cron from "node-cron";
-import { Pool } from "pg";
+import { pool } from "./lib/db";
 import { logger } from "./lib/logger";
 import { sendAlertEmail } from "./lib/email";
+import {
+  BASE_URL,
+  getFleetTz,
+  metersToMiles,
+  localDateOf,
+  localMidnightUtc,
+  fetchDevicePoints,
+} from "./lib/onestep";
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-
-const BASE_URL = "https://track.onestepgps.com/v3/api/public";
-const METERS_PER_MILE = 1609.344;
-
-function metersToMiles(m: number) {
-  return Math.round((m / METERS_PER_MILE) * 10) / 10;
-}
-
-/** Returns today's date as YYYY-MM-DD in server local time. */
+/** Returns today's date as YYYY-MM-DD in the configured FLEET_TZ. */
 function getTodayLocal(): string {
-  const now = new Date();
-  const yyyy = now.getFullYear();
-  const mm = String(now.getMonth() + 1).padStart(2, "0");
-  const dd = String(now.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
+  return localDateOf(new Date().toISOString(), getFleetTz());
 }
 
 export interface CheckResult {
@@ -43,9 +38,10 @@ async function fetchTodayMovingTrucks(): Promise<
     return [];
   }
 
+  const tz = getFleetTz();
   const todayStr = getTodayLocal();
-  const dtFrom = new Date(todayStr);
-  dtFrom.setHours(0, 0, 0, 0);
+  // Window: local midnight today (in FLEET_TZ) .. now.
+  const dtFrom = localMidnightUtc(todayStr, tz);
   const dtTo = new Date(); // now
 
   // Fetch all GPS devices
@@ -64,20 +60,17 @@ async function fetchTodayMovingTrucks(): Promise<
 
   for (const device of devices) {
     try {
-      const url =
-        `${BASE_URL}/device-point?api-key=${apiKey}` +
-        `&device_id=${device.device_id}` +
-        `&dt_server_from=${dtFrom.toISOString()}` +
-        `&dt_server_to=${dtTo.toISOString()}` +
-        `&limit=5000`;
-
-      const ptResp = await fetch(url);
-      if (!ptResp.ok) continue;
-
-      const ptData = (await ptResp.json()) as { result_list: unknown[] };
-      const points = ((ptData.result_list ?? []) as any[]).slice().sort(
-        (a, b) => (a.dt_tracker ?? "").localeCompare(b.dt_tracker ?? "")
-      );
+      const points = (
+        await fetchDevicePoints({
+          apiKey,
+          deviceId: device.device_id,
+          dtFrom,
+          dtTo,
+          limit: 5000,
+        })
+      )
+        .slice()
+        .sort((a, b) => (a.dt_tracker ?? "").localeCompare(b.dt_tracker ?? ""));
 
       let firstOdo: number | null = null;
       let lastOdo: number | null = null;

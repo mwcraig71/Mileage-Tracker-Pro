@@ -1,8 +1,7 @@
 import { Router } from "express";
-import { Pool } from "pg";
+import { pool } from "../lib/db";
 import { runAccountabilityCheck } from "../scheduler";
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const router = Router();
 
 // GET /api/alerts — unresolved alerts from the last 7 days

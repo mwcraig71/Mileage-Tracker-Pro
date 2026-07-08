@@ -576,7 +576,7 @@ export default function Reports() {
         )}
 
         {submitted && !isFetching && rows.length > 0 && (
-          <div className="overflow-x-auto rounded-xl border border-white/10">
+          <div className="hidden md:block overflow-x-auto rounded-xl border border-white/10">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-white/10 bg-white/[0.02] text-white/50 text-xs uppercase tracking-wide">
@@ -848,6 +848,75 @@ export default function Reports() {
                 </tr>
               </tfoot>
             </table>
+          </div>
+        )}
+
+        {/* Mobile stacked cards (below md) */}
+        {submitted && !isFetching && rows.length > 0 && (
+          <div className="md:hidden space-y-2.5">
+            {rows.map(row => {
+              const isSplit = row.split_index > 0;
+              return (
+                <div
+                  key={rowKey(row)}
+                  className={cn(
+                    "rounded-xl border border-white/10 bg-[#161b22] p-3",
+                    isSplit && "border-blue-500/20 bg-blue-950/10 ml-4",
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      {isSplit
+                        ? <span className="text-xs text-white/40 truncate">└ split {row.split_index}</span>
+                        : <span className="text-sm font-medium text-white truncate">{row.device_name}</span>}
+                    </div>
+                    {!isSplit && (
+                      <span className="text-xs font-mono text-white/40 shrink-0">{row.date}</span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
+                    {!isSplit && (
+                      <div>
+                        <span className="text-white/40">GPS </span>
+                        <span className="font-mono text-white/70">
+                          {row.gps_miles != null ? row.gps_miles.toFixed(1) : "—"}
+                        </span>
+                      </div>
+                    )}
+                    <div>
+                      <span className="text-white/40">Indirect </span>
+                      <span className="font-mono text-amber-400/80">
+                        {row.indirect_miles > 0 ? row.indirect_miles.toFixed(1) : "—"}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-white/40">Personal </span>
+                      <span className="font-mono text-purple-400/80">
+                        {row.personal_miles > 0 ? row.personal_miles.toFixed(1) : "—"}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-white/40">Direct </span>
+                      <span className="font-mono text-emerald-400/80">
+                        {row.direct_miles > 0 ? row.direct_miles.toFixed(1) : "—"}
+                      </span>
+                    </div>
+                  </div>
+                  {(row.project_number || row.team_leader_name) && (
+                    <div className="mt-2 pt-2 border-t border-white/5 grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                      <div className="truncate">
+                        <span className="text-white/40">Project </span>
+                        <span className="text-white/80">{row.project_number || "—"}</span>
+                      </div>
+                      <div className="truncate">
+                        <span className="text-white/40">Leader </span>
+                        <span className="text-white/80">{row.team_leader_name || "—"}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

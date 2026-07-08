@@ -1,24 +1,27 @@
 import { Router } from "express";
-import { Pool } from "pg";
+import { z } from "zod";
+import { pool } from "../lib/db";
+import { parseBody } from "../lib/validate";
+import { logger } from "../lib/logger";
+import {
+  BASE_URL,
+  getApiKey,
+  getFleetTz,
+  metersToMiles,
+  localMidnightUtc,
+  localEndOfDayUtc,
+  fetchDevicePoints,
+  bucketPointsByDay,
+} from "../lib/onestep";
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const router = Router();
 
-const BASE_URL = "https://track.onestepgps.com/v3/api/public";
-
-function getApiKey(): string {
-  const key = process.env.ONESTEP_GPS_API_KEY;
-  if (!key) {
-    throw new Error("ONESTEP_GPS_API_KEY environment variable is not set");
-  }
-  return key;
-}
-
-const METERS_PER_MILE = 1609.344;
-
-function metersToMiles(meters: number): number {
-  return Math.round((meters / METERS_PER_MILE) * 10) / 10;
-}
+const cacheSyncSchema = z.object({
+  device_ids: z.array(z.string()),
+  from: z.string(),
+  to: z.string(),
+  force: z.boolean().optional().default(false),
+});
 
 router.get("/devices", async (req, res) => {
   try {
@@ -48,14 +51,16 @@ router.get("/device-points", async (req, res) => {
       return;
     }
     const apiKey = getApiKey();
-    const url = `${BASE_URL}/device-point?api-key=${apiKey}&device_id=${device_id}&dt_server_from=${from}&dt_server_to=${to}&limit=1000&sort=dt_tracker,asc`;
-    const response = await fetch(url);
-    if (!response.ok) {
-      res.status(502).json({ error: "Failed to fetch device points from One-Step GPS" });
-      return;
-    }
-    const data = await response.json() as { result_list: unknown[] };
-    const points = (data.result_list || []).map((p: any) => {
+    // Paginate through pages of up to 5000 points so long ranges aren't capped.
+    const raw = await fetchDevicePoints({
+      apiKey,
+      deviceId: device_id,
+      dtFrom: new Date(from),
+      dtTo: new Date(to),
+      limit: 5000,
+      sort: true,
+    });
+    const points = raw.map((p: any) => {
       const odoMeters = p.device_point_detail?.vbus_odometer?.value ?? null;
       return {
         device_point_id: p.device_point_id,
@@ -80,6 +85,7 @@ router.get("/mileage-summary", async (req, res) => {
     }
 
     const apiKey = getApiKey();
+    const tz = getFleetTz();
 
     // Fetch device info for display name
     const devResponse = await fetch(`${BASE_URL}/device?api-key=${apiKey}`);
@@ -87,39 +93,20 @@ router.get("/mileage-summary", async (req, res) => {
     const device = (devData.result_list || []).find((d: any) => d.device_id === device_id) as any;
     const displayName = device?.display_name ?? device_id;
 
-    // Fetch device points for the date range
-    const dtFrom = new Date(from);
-    dtFrom.setHours(0, 0, 0, 0);
-    const dtTo = new Date(to);
-    dtTo.setHours(23, 59, 59, 999);
+    // Window: local midnight of `from` .. local end-of-day of `to`, in FLEET_TZ.
+    const dtFrom = localMidnightUtc(from, tz);
+    const dtTo = localEndOfDayUtc(to, tz);
 
-    const url = `${BASE_URL}/device-point?api-key=${apiKey}&device_id=${device_id}&dt_server_from=${dtFrom.toISOString()}&dt_server_to=${dtTo.toISOString()}&limit=5000`;
-    const ptResponse = await fetch(url);
-    if (!ptResponse.ok) {
-      res.status(502).json({ error: "Failed to fetch device points" });
-      return;
-    }
-    const ptData = await ptResponse.json() as { result_list: unknown[] };
-    const points = ptData.result_list || [];
-
-    // Sort points chronologically by dt_tracker
-    const sortedPoints = (points as any[]).slice().sort((a, b) => {
-      return (a.dt_tracker || "").localeCompare(b.dt_tracker || "");
+    const points = await fetchDevicePoints({
+      apiKey,
+      deviceId: device_id,
+      dtFrom,
+      dtTo,
+      limit: 5000,
     });
 
-    // Group by calendar date, keeping first and last odometer reading per day
-    const byDate: Record<string, { first: number; last: number }> = {};
-    for (const p of sortedPoints) {
-      const odoMeters = p.device_point_detail?.vbus_odometer?.value;
-      if (odoMeters == null || odoMeters === 0) continue;
-      const date = (p.dt_tracker || "").substring(0, 10);
-      if (!date) continue;
-      if (!byDate[date]) {
-        byDate[date] = { first: odoMeters, last: odoMeters };
-      } else {
-        byDate[date].last = odoMeters;
-      }
-    }
+    // Group by local calendar date, first/last odometer per day.
+    const byDate = bucketPointsByDay(points, tz);
 
     const daily_logs = Object.entries(byDate)
       .sort(([a], [b]) => a.localeCompare(b))
@@ -150,20 +137,18 @@ router.get("/mileage-summary", async (req, res) => {
 
 // POST /gps/cache/sync — fetch from One-Step GPS API and persist in gps_cache
 router.post("/cache/sync", async (req, res) => {
-  const { device_ids, from, to, force = false } = req.body as {
-    device_ids: string[];
-    from: string;
-    to: string;
-    force?: boolean;
-  };
+  const body = parseBody(cacheSyncSchema, req.body, res);
+  if (!body) return;
+  const { device_ids, from, to, force } = body;
 
-  if (!Array.isArray(device_ids) || !device_ids.length || !from || !to) {
+  if (!device_ids.length || !from || !to) {
     res.status(400).json({ error: "device_ids, from, and to are required" });
     return;
   }
 
   try {
     const apiKey = getApiKey();
+    const tz = getFleetTz();
 
     // Fetch device display names once for the whole batch
     const devResponse = await fetch(`${BASE_URL}/device?api-key=${apiKey}`);
@@ -174,6 +159,7 @@ router.post("/cache/sync", async (req, res) => {
 
     const synced: string[] = [];
     const skipped: string[] = [];
+    const failed: string[] = [];
 
     for (const device_id of device_ids) {
       if (!force) {
@@ -188,29 +174,25 @@ router.post("/cache/sync", async (req, res) => {
       }
 
       const displayName = deviceMap.get(device_id) ?? device_id;
-      const dtFrom = new Date(from);
-      dtFrom.setHours(0, 0, 0, 0);
-      const dtTo = new Date(to);
-      dtTo.setHours(23, 59, 59, 999);
+      const dtFrom = localMidnightUtc(from, tz);
+      const dtTo = localEndOfDayUtc(to, tz);
 
-      const url = `${BASE_URL}/device-point?api-key=${apiKey}&device_id=${device_id}&dt_server_from=${dtFrom.toISOString()}&dt_server_to=${dtTo.toISOString()}&limit=5000`;
-      const ptResponse = await fetch(url);
-      if (!ptResponse.ok) continue;
-
-      const ptData = await ptResponse.json() as { result_list: unknown[] };
-      const sortedPoints = ((ptData.result_list || []) as any[])
-        .slice()
-        .sort((a, b) => (a.dt_tracker || "").localeCompare(b.dt_tracker || ""));
-
-      const byDate: Record<string, { first: number; last: number }> = {};
-      for (const p of sortedPoints) {
-        const odoMeters = p.device_point_detail?.vbus_odometer?.value;
-        if (odoMeters == null || odoMeters === 0) continue;
-        const date = (p.dt_tracker || "").substring(0, 10);
-        if (!date) continue;
-        if (!byDate[date]) byDate[date] = { first: odoMeters, last: odoMeters };
-        else byDate[date].last = odoMeters;
+      let points;
+      try {
+        points = await fetchDevicePoints({
+          apiKey,
+          deviceId: device_id,
+          dtFrom,
+          dtTo,
+          limit: 5000,
+        });
+      } catch (err) {
+        logger.warn({ err, device_id }, "GPS fetch failed during cache sync");
+        failed.push(device_id);
+        continue;
       }
+
+      const byDate = bucketPointsByDay(points, tz);
 
       for (const [date, { first, last }] of Object.entries(byDate)) {
         await pool.query(
@@ -229,9 +211,9 @@ router.post("/cache/sync", async (req, res) => {
       synced.push(device_id);
     }
 
-    res.json({ synced, skipped });
+    res.json({ synced, skipped, failed });
   } catch (err) {
-    console.error("GPS cache sync error:", err);
+    logger.error({ err }, "GPS cache sync error");
     res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -286,19 +268,17 @@ router.get("/odometer-range", async (req, res) => {
       return;
     }
     const apiKey = getApiKey();
-    const dtFrom = new Date(from);
-    dtFrom.setHours(0, 0, 0, 0);
-    const dtTo = new Date(to);
-    dtTo.setHours(23, 59, 59, 999);
+    const tz = getFleetTz();
+    const dtFrom = localMidnightUtc(from, tz);
+    const dtTo = localEndOfDayUtc(to, tz);
 
-    const url = `${BASE_URL}/device-point?api-key=${apiKey}&device_id=${device_id}&dt_server_from=${dtFrom.toISOString()}&dt_server_to=${dtTo.toISOString()}&limit=5000`;
-    const ptResponse = await fetch(url);
-    if (!ptResponse.ok) {
-      res.status(502).json({ error: "Failed to fetch device points" });
-      return;
-    }
-    const ptData = await ptResponse.json() as { result_list: unknown[] };
-    const points = (ptData.result_list || []) as any[];
+    const points = await fetchDevicePoints({
+      apiKey,
+      deviceId: device_id,
+      dtFrom,
+      dtTo,
+      limit: 5000,
+    });
 
     const sorted = points.slice().sort((a, b) =>
       (a.dt_tracker || "").localeCompare(b.dt_tracker || "")

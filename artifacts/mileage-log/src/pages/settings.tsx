@@ -68,7 +68,7 @@ function StateSelect({ value, onChange }: { value: string; onChange: (v: string)
       value={value}
       onChange={e => onChange(e.target.value)}
       style={{ colorScheme: "dark" }}
-      className="h-8 rounded-md border border-white/10 bg-[#1c2333] px-2 text-xs text-white focus:outline-none focus:border-amber-500/50 min-w-[200px]"
+      className="h-8 rounded-md border border-white/10 bg-[#1c2333] px-2 text-xs text-white focus:outline-none focus:border-amber-500/50 w-full sm:w-auto sm:min-w-[200px]"
     >
       <option value="">— No state assigned —</option>
       {US_STATES.map(s => (
@@ -185,7 +185,7 @@ function TruckStatesSection() {
       ) : (
         <div className="space-y-2.5">
           {allTrucks.map(t => (
-            <div key={t.device_id} className="flex items-center gap-3">
+            <div key={t.device_id} className="flex items-center gap-3 flex-wrap">
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium truncate">{t.device_name}</p>
                 {t.isManual && (
@@ -217,13 +217,13 @@ function TruckStatesSection() {
           <Plus className="h-3.5 w-3.5" />
           Add Truck
         </p>
-        <div className="flex gap-2 items-start">
+        <div className="flex gap-2 items-start flex-wrap">
           <Input
             placeholder="Truck name (e.g. Truck #7)"
             value={newName}
             onChange={e => { setNewName(e.target.value); setAddError(""); }}
             onKeyDown={e => e.key === "Enter" && handleAdd()}
-            className="h-8 text-xs bg-white/5 border-white/10 focus:border-amber-500/50 w-56"
+            className="h-8 text-xs bg-white/5 border-white/10 focus:border-amber-500/50 w-full sm:w-56"
           />
           <Button onClick={handleAdd} disabled={addMut.isPending}
             className="h-8 text-xs bg-amber-500 hover:bg-amber-400 text-black font-semibold gap-1.5">
@@ -302,7 +302,7 @@ function ProjectStatesSection() {
       ) : (
         <div className="space-y-2.5">
           {projects.map(p => (
-            <div key={p.project_number} className="flex items-center gap-3">
+            <div key={p.project_number} className="flex items-center gap-3 flex-wrap">
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium font-mono">{p.project_number}</p>
               </div>
@@ -331,13 +331,13 @@ function ProjectStatesSection() {
           <Plus className="h-3.5 w-3.5" />
           Add Project
         </p>
-        <div className="flex gap-2 items-start">
+        <div className="flex gap-2 items-start flex-wrap">
           <Input
             placeholder="Project number (e.g. PRJ-2026-01)"
             value={newProj}
             onChange={e => { setNewProj(e.target.value); setAddError(""); }}
             onKeyDown={e => e.key === "Enter" && handleAddProject()}
-            className="h-8 text-xs bg-white/5 border-white/10 focus:border-amber-500/50 w-60"
+            className="h-8 text-xs bg-white/5 border-white/10 focus:border-amber-500/50 w-full sm:w-60"
           />
           <Button onClick={handleAddProject} disabled={createProjectMut.isPending}
             className="h-8 text-xs bg-amber-500 hover:bg-amber-400 text-black font-semibold gap-1.5">

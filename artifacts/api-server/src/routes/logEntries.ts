@@ -1,9 +1,23 @@
 import { Router } from "express";
-import { Pool } from "pg";
-
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+import { z } from "zod";
+import { pool } from "../lib/db";
+import { parseBody } from "../lib/validate";
 
 const router = Router();
+
+const logEntrySchema = z.object({
+  device_id: z.string(),
+  device_name: z.string(),
+  start_date: z.string(),
+  end_date: z.string(),
+  begin_odometer: z.number(),
+  end_odometer: z.number(),
+  indirect_miles: z.number().optional().default(0),
+  personal_miles: z.number().optional().default(0),
+  direct_miles: z.number().optional().default(0),
+  project_number: z.string(),
+  team_leader_name: z.string(),
+});
 
 router.get("/", async (_req, res) => {
   const result = await pool.query(`
@@ -28,18 +42,14 @@ router.get("/", async (_req, res) => {
 });
 
 router.post("/", async (req, res) => {
+  const body = parseBody(logEntrySchema, req.body, res);
+  if (!body) return;
   const {
     device_id, device_name, start_date, end_date,
     begin_odometer, end_odometer,
-    indirect_miles = 0, personal_miles = 0, direct_miles = 0,
+    indirect_miles, personal_miles, direct_miles,
     project_number, team_leader_name,
-  } = req.body as {
-    device_id: string; device_name: string;
-    start_date: string; end_date: string;
-    begin_odometer: number; end_odometer: number;
-    indirect_miles?: number; personal_miles?: number; direct_miles?: number;
-    project_number: string; team_leader_name: string;
-  };
+  } = body;
 
   const total_miles = Number(indirect_miles) + Number(personal_miles) + Number(direct_miles);
 

@@ -1,8 +1,40 @@
 import { Router } from "express";
-import { Pool } from "pg";
+import { z } from "zod";
+import { pool } from "../lib/db";
+import { parseBody } from "../lib/validate";
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const router = Router();
+
+// ── Schemas ───────────────────────────────────────────────────────────────────
+
+const truckStatesSchema = z.array(
+  z.object({
+    device_id: z.string(),
+    device_name: z.string().optional(),
+    state_code: z.string().optional(),
+  }),
+);
+
+const trucksSchema = z.object({
+  display_name: z.string().optional(),
+});
+
+const projectStatesSchema = z.array(
+  z.object({
+    project_number: z.string(),
+    state_code: z.string().optional(),
+  }),
+);
+
+const stateContactSchema = z.object({
+  state_code: z.string().optional(),
+  contact_name: z.string().optional(),
+  email: z.string().optional(),
+});
+
+const alertConfigSchema = z.object({
+  check_time: z.string().optional(),
+});
 
 // ── Truck States ────────────────────────────────────────────────────────────
 
@@ -14,15 +46,16 @@ router.get("/truck-states", async (_req, res) => {
 });
 
 router.put("/truck-states", async (req, res) => {
-  const items = req.body as Array<{ device_id: string; device_name?: string; state_code: string }>;
-  if (!Array.isArray(items)) {
-    res.status(400).json({ error: "Expected array" });
-    return;
-  }
+  const items = parseBody(truckStatesSchema, req.body, res);
+  if (!items) return;
+
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    await client.query("DELETE FROM truck_states");
+    // Non-destructive: upsert the submitted rows, then delete only rows whose
+    // key is NOT in the submitted list. A half-applied txn can no longer wipe
+    // the whole table. An empty (but present & valid) array deletes everything.
+    const submittedIds = items.map((i) => i.device_id).filter(Boolean);
     for (const item of items) {
       if (!item.device_id) continue;
       await client.query(
@@ -34,6 +67,10 @@ router.put("/truck-states", async (req, res) => {
         [item.device_id, item.device_name ?? "", item.state_code ?? ""]
       );
     }
+    await client.query(
+      `DELETE FROM truck_states WHERE device_id <> ALL($1::text[])`,
+      [submittedIds]
+    );
     await client.query("COMMIT");
     res.json({ ok: true });
   } catch (err) {
@@ -46,7 +83,9 @@ router.put("/truck-states", async (req, res) => {
 
 // Add a manually-registered truck (device_id prefix: "manual-")
 router.post("/trucks", async (req, res) => {
-  const { display_name } = req.body as { display_name?: string };
+  const body = parseBody(trucksSchema, req.body, res);
+  if (!body) return;
+  const { display_name } = body;
   if (!display_name?.trim()) {
     res.status(400).json({ error: "display_name is required" });
     return;
@@ -78,15 +117,15 @@ router.get("/project-states", async (_req, res) => {
 });
 
 router.put("/project-states", async (req, res) => {
-  const items = req.body as Array<{ project_number: string; state_code: string }>;
-  if (!Array.isArray(items)) {
-    res.status(400).json({ error: "Expected array" });
-    return;
-  }
+  const items = parseBody(projectStatesSchema, req.body, res);
+  if (!items) return;
+
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    await client.query("DELETE FROM project_states");
+    // Non-destructive: upsert submitted rows, then delete only rows whose key
+    // is NOT in the submitted list (see truck-states for rationale).
+    const submittedKeys = items.map((i) => i.project_number).filter(Boolean);
     for (const item of items) {
       if (!item.project_number) continue;
       await client.query(
@@ -97,6 +136,10 @@ router.put("/project-states", async (req, res) => {
         [item.project_number, item.state_code ?? ""]
       );
     }
+    await client.query(
+      `DELETE FROM project_states WHERE project_number <> ALL($1::text[])`,
+      [submittedKeys]
+    );
     await client.query("COMMIT");
     res.json({ ok: true });
   } catch (err) {
@@ -117,11 +160,9 @@ router.get("/state-contacts", async (_req, res) => {
 });
 
 router.post("/state-contacts", async (req, res) => {
-  const { state_code, contact_name, email } = req.body as {
-    state_code?: string;
-    contact_name?: string;
-    email?: string;
-  };
+  const body = parseBody(stateContactSchema, req.body, res);
+  if (!body) return;
+  const { state_code, contact_name, email } = body;
   if (!state_code?.trim() || !contact_name?.trim() || !email?.trim()) {
     res.status(400).json({ error: "state_code, contact_name, and email are required" });
     return;
@@ -154,7 +195,9 @@ router.get("/alert-config", async (_req, res) => {
 });
 
 router.put("/alert-config", async (req, res) => {
-  const { check_time } = req.body as { check_time?: string };
+  const body = parseBody(alertConfigSchema, req.body, res);
+  if (!body) return;
+  const { check_time } = body;
   if (typeof check_time !== "string" || !/^\d{1,2}:\d{2}$/.test(check_time)) {
     res.status(400).json({ error: "check_time must be HH:MM format" });
     return;

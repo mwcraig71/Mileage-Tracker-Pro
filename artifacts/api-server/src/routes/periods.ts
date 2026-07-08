@@ -1,8 +1,17 @@
 import { Router } from "express";
-import { Pool } from "pg";
+import { z } from "zod";
+import { pool } from "../lib/db";
+import { parseBody } from "../lib/validate";
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const router = Router();
+
+const createPeriodSchema = z.object({
+  month_key: z.string(),
+});
+
+const markExportedSchema = z.object({
+  annotation_ids: z.array(z.number()),
+});
 
 function fmtDate(val: unknown): string {
   if (val instanceof Date) return val.toISOString().slice(0, 10);
@@ -38,7 +47,9 @@ router.get("/", async (_req, res) => {
 
 // Get or create a period by month_key (e.g. "2026-05")
 router.post("/", async (req, res) => {
-  const { month_key } = req.body as { month_key: string };
+  const body = parseBody(createPeriodSchema, req.body, res);
+  if (!body) return;
+  const { month_key } = body;
   if (!month_key?.match(/^\d{4}-\d{2}$/)) {
     res.status(400).json({ error: "month_key must be YYYY-MM" });
     return;
@@ -79,8 +90,10 @@ router.post("/:id/finalize", async (req, res) => {
 
 // Mark annotations as exported
 router.post("/:id/mark-exported", async (req, res) => {
-  const { annotation_ids } = req.body as { annotation_ids: number[] };
-  if (!Array.isArray(annotation_ids) || annotation_ids.length === 0) {
+  const body = parseBody(markExportedSchema, req.body, res);
+  if (!body) return;
+  const { annotation_ids } = body;
+  if (annotation_ids.length === 0) {
     res.status(400).json({ error: "annotation_ids is required" });
     return;
   }

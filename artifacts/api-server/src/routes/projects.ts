@@ -1,9 +1,13 @@
 import { Router } from "express";
-import { Pool } from "pg";
-
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+import { z } from "zod";
+import { pool } from "../lib/db";
+import { parseBody } from "../lib/validate";
 
 const router = Router();
+
+const projectSchema = z.object({
+  project_number: z.string(),
+});
 
 router.get("/", async (_req, res) => {
   const result = await pool.query("SELECT * FROM projects ORDER BY project_number ASC");
@@ -11,7 +15,9 @@ router.get("/", async (_req, res) => {
 });
 
 router.post("/", async (req, res) => {
-  const { project_number } = req.body as { project_number: string };
+  const body = parseBody(projectSchema, req.body, res);
+  if (!body) return;
+  const { project_number } = body;
   if (!project_number?.trim()) {
     res.status(400).json({ error: "project_number is required" });
     return;

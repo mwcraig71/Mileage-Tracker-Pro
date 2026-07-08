@@ -1,29 +1,35 @@
 import { Router } from "express";
+import { createHash, timingSafeEqual } from "crypto";
+import { z } from "zod";
 import { generateManagerToken } from "../managerToken";
+import { rateLimit } from "../middlewares/rateLimit";
+import { parseBody } from "../lib/validate";
 
 const router = Router();
 
-/**
- * GET /api/config/manager-password
- * Compatibility alias required by the task spec.
- * Accepts the password in the Authorization header as "Bearer <password>"
- * and returns { valid: boolean } — never exposes the secret.
- * Note: POST /api/config/verify-password is preferred because it also
- * issues a scoped unlock token and avoids query-param credential exposure.
- */
-router.get("/manager-password", (req, res) => {
-  const managerPassword = process.env.MANAGER_PASSWORD;
-  if (!managerPassword) {
-    res.status(503).json({ error: "Manager password is not configured on this server. Set the MANAGER_PASSWORD environment secret." });
-    return;
-  }
-  const auth = req.headers.authorization ?? "";
-  const password = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-  res.json({ valid: password === managerPassword });
+// Per-IP rate limit for password verification: 5 attempts / 15 minutes.
+const verifyPasswordLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: "Too many attempts. Try again later.",
 });
 
-router.post("/verify-password", (req, res) => {
-  const { password, period_id } = req.body as { password?: string; period_id?: number };
+const verifyPasswordSchema = z.object({
+  password: z.string().optional(),
+  period_id: z.number().optional(),
+});
+
+/** Constant-time string comparison (sha256 both sides so lengths match). */
+function safeEqual(a: string, b: string): boolean {
+  const ha = createHash("sha256").update(a).digest();
+  const hb = createHash("sha256").update(b).digest();
+  return timingSafeEqual(ha, hb);
+}
+
+router.post("/verify-password", verifyPasswordLimiter, (req, res) => {
+  const body = parseBody(verifyPasswordSchema, req.body, res);
+  if (!body) return;
+  const { password, period_id } = body;
 
   const managerPassword = process.env.MANAGER_PASSWORD;
   if (!managerPassword) {
@@ -31,7 +37,7 @@ router.post("/verify-password", (req, res) => {
     return;
   }
 
-  if (typeof password !== "string" || password !== managerPassword) {
+  if (typeof password !== "string" || !safeEqual(password, managerPassword)) {
     res.json({ valid: false, token: null });
     return;
   }

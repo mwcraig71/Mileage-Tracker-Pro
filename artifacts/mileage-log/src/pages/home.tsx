@@ -1340,12 +1340,12 @@ export default function Home() {
             {/* ── Current log controls ──────────────────────────────────────── */}
             <div className="flex flex-wrap items-end gap-3 mb-5 print:hidden">
               {/* Truck selector */}
-              <div className="space-y-1.5">
+              <div className="space-y-1.5 w-full sm:w-auto">
                 <Label className="text-[10px] text-white/40 uppercase tracking-wider">Vehicles</Label>
                 <Popover open={truckOpen} onOpenChange={setTruckOpen}>
                   <PopoverTrigger asChild>
                     <Button variant="outline" disabled={devicesLoading}
-                      className="h-9 min-w-[180px] justify-between bg-white/5 border-white/10 hover:bg-white/10 text-sm font-normal">
+                      className="h-9 w-full sm:w-auto sm:min-w-[180px] justify-between bg-white/5 border-white/10 hover:bg-white/10 text-sm font-normal">
                       <span className={cn(!selectedIds.length && "text-white/40")}>{truckLabel}</span>
                       <ChevronDown className="h-3.5 w-3.5 opacity-50 ml-2" />
                     </Button>
@@ -1377,26 +1377,26 @@ export default function Home() {
               </div>
 
               {/* Date range */}
-              <div className="space-y-1.5">
+              <div className="space-y-1.5 flex-1 min-w-[130px] sm:flex-none">
                 <Label className="text-[10px] text-white/40 uppercase tracking-wider">From</Label>
                 <Input type="date" value={dateFrom}
                   onChange={e => { setDateFrom(e.target.value); setSubmitted(false); }}
-                  className="h-9 w-[150px] bg-white/5 border-white/10 text-sm" />
+                  className="h-9 w-full sm:w-[150px] bg-white/5 border-white/10 text-sm" />
               </div>
-              <div className="space-y-1.5">
+              <div className="space-y-1.5 flex-1 min-w-[130px] sm:flex-none">
                 <Label className="text-[10px] text-white/40 uppercase tracking-wider">To</Label>
                 <Input type="date" value={dateTo}
                   onChange={e => { setDateTo(e.target.value); setSubmitted(false); }}
-                  className="h-9 w-[150px] bg-white/5 border-white/10 text-sm" />
+                  className="h-9 w-full sm:w-[150px] bg-white/5 border-white/10 text-sm" />
               </div>
 
               {/* Project filter */}
-              <div className="space-y-1.5">
+              <div className="space-y-1.5 flex-1 min-w-[130px] sm:flex-none">
                 <Label className="text-[10px] text-white/40 uppercase tracking-wider">Project</Label>
                 <Popover open={projectFilterOpen} onOpenChange={setProjectFilterOpen}>
                   <PopoverTrigger asChild>
                     <Button variant="outline"
-                      className="h-9 min-w-[150px] justify-between bg-white/5 border-white/10 hover:bg-white/10 text-sm font-normal">
+                      className="h-9 w-full sm:w-auto sm:min-w-[150px] justify-between bg-white/5 border-white/10 hover:bg-white/10 text-sm font-normal">
                       <span className={cn(!projectFilter && "text-white/40")}>{projectFilter || "All projects"}</span>
                       <div className="flex items-center gap-1">
                         {projectFilter && (
@@ -1432,12 +1432,12 @@ export default function Home() {
               </div>
 
               {/* Leader filter */}
-              <div className="space-y-1.5">
+              <div className="space-y-1.5 flex-1 min-w-[130px] sm:flex-none">
                 <Label className="text-[10px] text-white/40 uppercase tracking-wider">Team Leader</Label>
                 <Popover open={leaderFilterOpen} onOpenChange={setLeaderFilterOpen}>
                   <PopoverTrigger asChild>
                     <Button variant="outline"
-                      className="h-9 min-w-[150px] justify-between bg-white/5 border-white/10 hover:bg-white/10 text-sm font-normal">
+                      className="h-9 w-full sm:w-auto sm:min-w-[150px] justify-between bg-white/5 border-white/10 hover:bg-white/10 text-sm font-normal">
                       <span className={cn(!leaderFilter && "text-white/40")}>{leaderFilter || "All leaders"}</span>
                       <div className="flex items-center gap-1">
                         {leaderFilter && (
@@ -1474,7 +1474,7 @@ export default function Home() {
 
               <Button onClick={handleGenerate}
                 disabled={selectedIds.length === 0 || !dateFrom || !dateTo || isLoadingGPS || isGenerating}
-                className="h-9 bg-amber-500 hover:bg-amber-400 text-black font-semibold text-sm">
+                className="h-9 w-full sm:w-auto bg-amber-500 hover:bg-amber-400 text-black font-semibold text-sm">
                 {isGenerating || isLoadingGPS
                   ? <><Loader2 className="h-4 w-4 mr-1.5 animate-spin" />Loading…</>
                   : <><Filter className="h-4 w-4 mr-1.5" />Generate Log</>}
@@ -1513,8 +1513,8 @@ export default function Home() {
             </div>
 
 
-            {/* GPS table */}
-            <div className="rounded-lg border border-white/10 overflow-hidden">
+            {/* GPS table (desktop only) */}
+            <div className="hidden md:block rounded-lg border border-white/10 overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm border-collapse">
                   {tableHead}
@@ -1543,6 +1543,91 @@ export default function Home() {
                     renderFooter(displayedRows, getAnnotation)}
                 </table>
               </div>
+            </div>
+
+            {/* Read-only stacked cards (mobile, below md) */}
+            <div className="md:hidden">
+              {!submitted ? (
+                <div className="rounded-lg border border-white/10 py-16 text-center">
+                  <Truck className="h-8 w-8 mx-auto mb-3 text-white/10" />
+                  <p className="text-white/25 text-sm px-6">Select trucks and a date range, then tap Generate Log.</p>
+                </div>
+              ) : isLoadingGPS ? (
+                <div className="rounded-lg border border-white/10 py-16 text-center">
+                  <Loader2 className="h-6 w-6 animate-spin mx-auto mb-3 text-amber-400/50" />
+                  <p className="text-white/30 text-sm">Pulling GPS data…</p>
+                </div>
+              ) : displayedRows.length === 0 ? (
+                <div className="rounded-lg border border-white/10 py-16 text-center">
+                  <p className="text-white/30 text-sm">No driving days found for the selected period.</p>
+                </div>
+              ) : (
+                <>
+                  <p className="text-[11px] text-white/40 mb-2.5 flex items-center gap-1.5">
+                    <Lock className="h-3 w-3" />
+                    Editing is available on desktop.
+                  </p>
+                  <div className="space-y-2.5">
+                    {displayedRows.map(row => {
+                      const ann      = getAnnotation(row.key);
+                      const savedInfo = savedAnnotationMap[row.key];
+                      const indirect = parseFloat(ann.indirect) || 0;
+                      const personal = parseFloat(ann.personal) || 0;
+                      const direct   = ann.direct !== "" ? parseFloat(ann.direct) : row.gpsMiles;
+                      return (
+                        <div key={row.key} className="rounded-xl border border-white/10 bg-[#161b22] p-3">
+                          <div className="flex items-center justify-between gap-2 mb-2">
+                            <span className="text-sm font-medium text-amber-400/90 truncate">{row.deviceName}</span>
+                            <div className="flex items-center gap-2 shrink-0">
+                              {savedInfo && (
+                                <span className={cn(
+                                  "text-[10px] px-1.5 py-0.5 rounded-full border font-medium",
+                                  savedInfo.is_exported
+                                    ? "text-white/40 border-white/15"
+                                    : "text-emerald-400/80 border-emerald-500/25 bg-emerald-500/10",
+                                )}>
+                                  {savedInfo.is_exported ? "Exported" : "Saved"}
+                                </span>
+                              )}
+                              <span className="text-xs font-mono text-white/40">{row.date}</span>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
+                            <div>
+                              <span className="text-white/40">GPS </span>
+                              <span className="font-mono text-white/70">{row.gpsMiles.toFixed(1)}</span>
+                            </div>
+                            <div>
+                              <span className="text-white/40">Indirect </span>
+                              <span className="font-mono text-white/70">{indirect > 0 ? indirect.toFixed(1) : "—"}</span>
+                            </div>
+                            <div>
+                              <span className="text-white/40">Personal </span>
+                              <span className="font-mono text-white/70">{personal > 0 ? personal.toFixed(1) : "—"}</span>
+                            </div>
+                            <div>
+                              <span className="text-white/40">Direct </span>
+                              <span className="font-mono text-white/70">{direct.toFixed(1)}</span>
+                            </div>
+                          </div>
+                          {(ann.project || ann.leader) && (
+                            <div className="mt-2 pt-2 border-t border-white/5 grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                              <div className="truncate">
+                                <span className="text-white/40">Project </span>
+                                <span className="text-white/80">{ann.project || "—"}</span>
+                              </div>
+                              <div className="truncate">
+                                <span className="text-white/40">Leader </span>
+                                <span className="text-white/80">{ann.leader || "—"}</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
             </div>
           </>
       </main>

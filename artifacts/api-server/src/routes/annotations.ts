@@ -1,9 +1,36 @@
 import { Router } from "express";
-import { Pool } from "pg";
+import { z } from "zod";
+import { pool } from "../lib/db";
 import { verifyManagerToken } from "../managerToken";
+import { parseBody } from "../lib/validate";
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const router = Router();
+
+const annotationInputSchema = z.object({
+  period_id: z.number(),
+  device_id: z.string(),
+  device_name: z.string().optional().default(""),
+  date: z.string(),
+  split_index: z.number().optional().default(0),
+  begin_odometer: z.number().optional(),
+  end_odometer: z.number().optional(),
+  gps_miles: z.number().optional(),
+  indirect_miles: z.number().optional().default(0),
+  personal_miles: z.number().optional().default(0),
+  direct_miles: z.number().optional().default(0),
+  project_number: z.string().optional().default(""),
+  team_leader_name: z.string().optional().default(""),
+  manager_token: z.string().optional(),
+});
+
+const annotationUpdateSchema = z.object({
+  indirect_miles: z.number().optional(),
+  personal_miles: z.number().optional(),
+  direct_miles: z.number().optional(),
+  project_number: z.string().optional(),
+  team_leader_name: z.string().optional(),
+  manager_token: z.string().optional(),
+});
 
 function fmtAnnotation(r: Record<string, unknown>) {
   return {
@@ -30,21 +57,16 @@ function fmtAnnotation(r: Record<string, unknown>) {
 // Upsert annotation (by period_id + device_id + date)
 // Rejects writes to finalized periods unless a valid manager_token is provided.
 router.post("/", async (req, res) => {
+  const body = parseBody(annotationInputSchema, req.body, res);
+  if (!body) return;
   const {
-    period_id, device_id, device_name = "", date,
-    split_index = 0,
+    period_id, device_id, device_name, date,
+    split_index,
     begin_odometer, end_odometer, gps_miles,
-    indirect_miles = 0, personal_miles = 0, direct_miles = 0,
-    project_number = "", team_leader_name = "",
+    indirect_miles, personal_miles, direct_miles,
+    project_number, team_leader_name,
     manager_token,
-  } = req.body as {
-    period_id: number; device_id: string; device_name?: string; date: string;
-    split_index?: number;
-    begin_odometer?: number; end_odometer?: number; gps_miles?: number;
-    indirect_miles?: number; personal_miles?: number; direct_miles?: number;
-    project_number?: string; team_leader_name?: string;
-    manager_token?: string;
-  };
+  } = body;
 
   const periodResult = await pool.query(
     "SELECT finalized FROM periods WHERE id = $1",
@@ -104,15 +126,13 @@ router.delete("/:id", async (req, res) => {
 // Update a single annotation.
 // Rejects writes to finalized periods unless a valid manager_token is provided.
 router.put("/:id", async (req, res) => {
+  const body = parseBody(annotationUpdateSchema, req.body, res);
+  if (!body) return;
   const {
     indirect_miles, personal_miles, direct_miles,
     project_number, team_leader_name,
     manager_token,
-  } = req.body as {
-    indirect_miles?: number; personal_miles?: number; direct_miles?: number;
-    project_number?: string; team_leader_name?: string;
-    manager_token?: string;
-  };
+  } = body;
 
   // Resolve this annotation's period to check finalized status
   const annResult = await pool.query(

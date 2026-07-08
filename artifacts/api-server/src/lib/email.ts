@@ -1,6 +1,16 @@
 import nodemailer from "nodemailer";
 import { logger } from "./logger";
 
+/** Escape a string for safe interpolation into HTML email bodies. */
+export function escapeHtml(s: string): string {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function getTransporter() {
   const host = process.env.SMTP_HOST;
   const port = parseInt(process.env.SMTP_PORT ?? "587", 10);
@@ -60,9 +70,13 @@ Please ensure the driver logs their session and project as soon as possible.
 
 — FleetLog Daily Accountability Check`;
 
+  const safeContactName = escapeHtml(params.contactName);
+  const safeTruckName = escapeHtml(params.truckName);
+  const safeAlertDate = escapeHtml(params.alertDate);
+
   const html = `
-<p>Hi ${params.contactName},</p>
-<p><strong>FleetLog</strong> detected that <strong>${params.truckName}</strong> had GPS movement on <strong>${params.alertDate}</strong> but the log is incomplete.</p>
+<p>Hi ${safeContactName},</p>
+<p><strong>FleetLog</strong> detected that <strong>${safeTruckName}</strong> had GPS movement on <strong>${safeAlertDate}</strong> but the log is incomplete.</p>
 <p><strong>Issue:</strong> ${issueText}</p>
 <p style="margin:20px 0">
   <a href="${appUrl}" style="display:inline-block;background:#d97706;color:#fff;font-weight:bold;text-decoration:none;padding:10px 20px;border-radius:6px;font-size:14px">

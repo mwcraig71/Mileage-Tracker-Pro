@@ -1,9 +1,16 @@
 import { Router } from "express";
-import { Pool } from "pg";
-
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+import { z } from "zod";
+import { pool } from "../lib/db";
+import { parseBody } from "../lib/validate";
 
 const router = Router();
+
+const driverSessionSchema = z.object({
+  driver_name: z.string().optional(),
+  device_id: z.string().optional(),
+  project_number: z.string().optional(),
+  shift_date: z.string().optional(), // YYYY-MM-DD — optional, defaults to today
+});
 
 router.get("/", async (req, res) => {
   const { from, to, device_id } = req.query as {
@@ -37,12 +44,9 @@ router.get("/", async (req, res) => {
 });
 
 router.post("/", async (req, res) => {
-  const { driver_name, device_id, project_number, shift_date } = req.body as {
-    driver_name?: string;
-    device_id?: string;
-    project_number?: string;
-    shift_date?: string; // YYYY-MM-DD — optional, defaults to today
-  };
+  const body = parseBody(driverSessionSchema, req.body, res);
+  if (!body) return;
+  const { driver_name, device_id, project_number, shift_date } = body;
 
   if (!driver_name?.trim()) {
     res.status(400).json({ error: "driver_name is required" });
