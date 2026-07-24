@@ -1,7 +1,5 @@
-import { Pool } from "pg";
+import { pool } from "./lib/db";
 import { logger } from "./lib/logger";
-
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 /**
  * Run all idempotent schema migrations on startup.

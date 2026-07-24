@@ -1,7 +1,6 @@
 import { Router } from "express";
-import { Pool } from "pg";
+import { pool } from "../lib/db";
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const router = Router();
 
 // ── Truck States ────────────────────────────────────────────────────────────
@@ -22,7 +21,17 @@ router.put("/truck-states", async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    await client.query("DELETE FROM truck_states");
+    // Replace-list semantics, but delete only rows absent from the payload —
+    // a malformed/partial payload can no longer silently wipe the table.
+    const keepIds = items.map((i) => i.device_id).filter(Boolean);
+    if (keepIds.length > 0) {
+      await client.query(
+        "DELETE FROM truck_states WHERE device_id <> ALL($1::text[])",
+        [keepIds]
+      );
+    } else {
+      await client.query("DELETE FROM truck_states");
+    }
     for (const item of items) {
       if (!item.device_id) continue;
       await client.query(
@@ -86,7 +95,16 @@ router.put("/project-states", async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    await client.query("DELETE FROM project_states");
+    // Same targeted-delete approach as truck-states above.
+    const keepNums = items.map((i) => i.project_number).filter(Boolean);
+    if (keepNums.length > 0) {
+      await client.query(
+        "DELETE FROM project_states WHERE project_number <> ALL($1::text[])",
+        [keepNums]
+      );
+    } else {
+      await client.query("DELETE FROM project_states");
+    }
     for (const item of items) {
       if (!item.project_number) continue;
       await client.query(
@@ -138,8 +156,12 @@ router.post("/state-contacts", async (req, res) => {
 });
 
 router.delete("/state-contacts/:id", async (req, res) => {
-  const { id } = req.params;
-  await pool.query("DELETE FROM state_contacts WHERE id = $1", [Number(id)]);
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+  await pool.query("DELETE FROM state_contacts WHERE id = $1", [id]);
   res.status(204).end();
 });
 

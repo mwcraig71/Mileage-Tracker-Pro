@@ -1,12 +1,12 @@
 import { Router } from "express";
-import { Pool } from "pg";
+import { pool } from "../lib/db";
+import { toDateOnly } from "../lib/dates";
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const router = Router();
 
-function fmtDate(val: unknown): string {
-  if (val instanceof Date) return val.toISOString().slice(0, 10);
-  return String(val).slice(0, 10);
+function parseId(raw: string): number | null {
+  const id = parseInt(raw, 10);
+  return isNaN(id) ? null : id;
 }
 
 function fmtAnnotation(r: Record<string, unknown>) {
@@ -15,7 +15,7 @@ function fmtAnnotation(r: Record<string, unknown>) {
     period_id: r.period_id,
     device_id: r.device_id,
     device_name: r.device_name,
-    date: fmtDate(r.date),
+    date: toDateOnly(r.date),
     begin_odometer: r.begin_odometer != null ? Number(r.begin_odometer) : null,
     end_odometer: r.end_odometer != null ? Number(r.end_odometer) : null,
     gps_miles: r.gps_miles != null ? Number(r.gps_miles) : null,
@@ -56,19 +56,29 @@ router.post("/", async (req, res) => {
 
 // Get annotations for a period
 router.get("/:id/annotations", async (req, res) => {
+  const id = parseId(req.params.id);
+  if (id === null) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
   const result = await pool.query(
     "SELECT * FROM log_annotations WHERE period_id = $1 ORDER BY date ASC, device_id ASC",
-    [req.params.id]
+    [id]
   );
   res.json(result.rows.map(fmtAnnotation));
 });
 
 // Finalize a period
 router.post("/:id/finalize", async (req, res) => {
+  const id = parseId(req.params.id);
+  if (id === null) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
   const result = await pool.query(
     `UPDATE periods SET finalized = TRUE, finalized_at = NOW()
      WHERE id = $1 AND finalized = FALSE RETURNING *`,
-    [req.params.id]
+    [id]
   );
   if (result.rows.length === 0) {
     res.status(404).json({ error: "Period not found or already finalized" });
@@ -79,17 +89,26 @@ router.post("/:id/finalize", async (req, res) => {
 
 // Mark annotations as exported
 router.post("/:id/mark-exported", async (req, res) => {
-  const { annotation_ids } = req.body as { annotation_ids: number[] };
-  if (!Array.isArray(annotation_ids) || annotation_ids.length === 0) {
-    res.status(400).json({ error: "annotation_ids is required" });
+  const id = parseId(req.params.id);
+  if (id === null) {
+    res.status(400).json({ error: "Invalid id" });
     return;
   }
-  await pool.query(
+  const { annotation_ids } = req.body as { annotation_ids: number[] };
+  if (
+    !Array.isArray(annotation_ids) ||
+    annotation_ids.length === 0 ||
+    !annotation_ids.every((n) => Number.isInteger(n))
+  ) {
+    res.status(400).json({ error: "annotation_ids must be a non-empty array of integers" });
+    return;
+  }
+  const result = await pool.query(
     `UPDATE log_annotations SET is_exported = TRUE, updated_at = NOW()
      WHERE period_id = $1 AND id = ANY($2::int[])`,
-    [req.params.id, annotation_ids]
+    [id, annotation_ids]
   );
-  res.json({ updated: annotation_ids.length });
+  res.json({ updated: result.rowCount ?? 0 });
 });
 
 export default router;

@@ -1,8 +1,8 @@
 import { Router } from "express";
-import { Pool } from "pg";
+import { pool } from "../lib/db";
+import { toDateOnly } from "../lib/dates";
 import { verifyManagerToken } from "../managerToken";
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const router = Router();
 
 function fmtAnnotation(r: Record<string, unknown>) {
@@ -11,7 +11,7 @@ function fmtAnnotation(r: Record<string, unknown>) {
     period_id: r.period_id,
     device_id: r.device_id,
     device_name: r.device_name,
-    date: r.date instanceof Date ? r.date.toISOString().slice(0, 10) : String(r.date).slice(0, 10),
+    date: toDateOnly(r.date),
     split_index: Number(r.split_index ?? 0),
     begin_odometer: r.begin_odometer != null ? Number(r.begin_odometer) : null,
     end_odometer: r.end_odometer != null ? Number(r.end_odometer) : null,
@@ -89,15 +89,42 @@ router.post("/", async (req, res) => {
 });
 
 // Delete a single annotation record (used to remove a saved split row).
+// Enforces the same finalized-period lock as POST and PUT — previously this
+// was the one write path that skipped the manager-token check.
 router.delete("/:id", async (req, res) => {
-  const result = await pool.query(
-    "DELETE FROM log_annotations WHERE id = $1 RETURNING id",
-    [req.params.id]
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+
+  const annResult = await pool.query(
+    "SELECT period_id FROM log_annotations WHERE id = $1",
+    [id]
   );
-  if (result.rows.length === 0) {
+  if (annResult.rows.length === 0) {
     res.status(404).json({ error: "Annotation not found" });
     return;
   }
+  const periodId = Number(annResult.rows[0].period_id);
+
+  const periodResult = await pool.query(
+    "SELECT finalized FROM periods WHERE id = $1",
+    [periodId]
+  );
+  if (periodResult.rows[0]?.finalized === true) {
+    const managerToken =
+      (req.body as { manager_token?: string } | undefined)?.manager_token ??
+      (typeof req.query.manager_token === "string" ? req.query.manager_token : undefined);
+    if (!verifyManagerToken(managerToken, periodId)) {
+      res.status(403).json({
+        error: "This period is finalized. A valid manager unlock token is required to make changes.",
+      });
+      return;
+    }
+  }
+
+  await pool.query("DELETE FROM log_annotations WHERE id = $1", [id]);
   res.status(204).send();
 });
 

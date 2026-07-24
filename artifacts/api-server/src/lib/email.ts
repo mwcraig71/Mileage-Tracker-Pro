@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer";
 import { logger } from "./logger";
+import { escapeHtml } from "./security";
 
 function getTransporter() {
   const host = process.env.SMTP_HOST;
@@ -60,9 +61,15 @@ Please ensure the driver logs their session and project as soon as possible.
 
 — FleetLog Daily Accountability Check`;
 
+  // Escape user-influenced values (truck names can be set via the API) so a
+  // crafted name can't inject HTML into the alert email.
+  const safeContact = escapeHtml(params.contactName);
+  const safeTruck = escapeHtml(params.truckName);
+  const safeDate = escapeHtml(params.alertDate);
+
   const html = `
-<p>Hi ${params.contactName},</p>
-<p><strong>FleetLog</strong> detected that <strong>${params.truckName}</strong> had GPS movement on <strong>${params.alertDate}</strong> but the log is incomplete.</p>
+<p>Hi ${safeContact},</p>
+<p><strong>FleetLog</strong> detected that <strong>${safeTruck}</strong> had GPS movement on <strong>${safeDate}</strong> but the log is incomplete.</p>
 <p><strong>Issue:</strong> ${issueText}</p>
 <p style="margin:20px 0">
   <a href="${appUrl}" style="display:inline-block;background:#d97706;color:#fff;font-weight:bold;text-decoration:none;padding:10px 20px;border-radius:6px;font-size:14px">

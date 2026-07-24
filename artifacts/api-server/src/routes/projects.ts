@@ -1,7 +1,5 @@
 import { Router } from "express";
-import { Pool } from "pg";
-
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+import { pool } from "../lib/db";
 
 const router = Router();
 
@@ -25,8 +23,19 @@ router.post("/", async (req, res) => {
 
 router.delete("/:project_number", async (req, res) => {
   const { project_number } = req.params;
-  await pool.query("DELETE FROM project_states WHERE project_number = $1", [project_number]);
-  await pool.query("DELETE FROM projects WHERE project_number = $1", [project_number]);
+  // Both deletes in one transaction so a failure can't leave orphaned state.
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("DELETE FROM project_states WHERE project_number = $1", [project_number]);
+    await client.query("DELETE FROM projects WHERE project_number = $1", [project_number]);
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
   res.status(204).send();
 });
 
