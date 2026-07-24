@@ -1,7 +1,6 @@
 import { Router } from "express";
-import { Pool } from "pg";
+import { pool } from "../lib/db";
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const router = Router();
 
 const BASE_URL = "https://track.onestepgps.com/v3/api/public";
@@ -12,6 +11,12 @@ function getApiKey(): string {
     throw new Error("ONESTEP_GPS_API_KEY environment variable is not set");
   }
   return key;
+}
+
+/** Build a device-point URL with all query values percent-encoded. */
+function devicePointUrl(apiKey: string, params: Record<string, string>): string {
+  const qs = new URLSearchParams({ "api-key": apiKey, ...params });
+  return `${BASE_URL}/device-point?${qs.toString()}`;
 }
 
 const METERS_PER_MILE = 1609.344;
@@ -48,7 +53,13 @@ router.get("/device-points", async (req, res) => {
       return;
     }
     const apiKey = getApiKey();
-    const url = `${BASE_URL}/device-point?api-key=${apiKey}&device_id=${device_id}&dt_server_from=${from}&dt_server_to=${to}&limit=1000&sort=dt_tracker,asc`;
+    const url = devicePointUrl(apiKey, {
+      device_id,
+      dt_server_from: from,
+      dt_server_to: to,
+      limit: "1000",
+      sort: "dt_tracker,asc",
+    });
     const response = await fetch(url);
     if (!response.ok) {
       res.status(502).json({ error: "Failed to fetch device points from One-Step GPS" });
@@ -93,7 +104,12 @@ router.get("/mileage-summary", async (req, res) => {
     const dtTo = new Date(to);
     dtTo.setHours(23, 59, 59, 999);
 
-    const url = `${BASE_URL}/device-point?api-key=${apiKey}&device_id=${device_id}&dt_server_from=${dtFrom.toISOString()}&dt_server_to=${dtTo.toISOString()}&limit=5000`;
+    const url = devicePointUrl(apiKey, {
+      device_id,
+      dt_server_from: dtFrom.toISOString(),
+      dt_server_to: dtTo.toISOString(),
+      limit: "5000",
+    });
     const ptResponse = await fetch(url);
     if (!ptResponse.ok) {
       res.status(502).json({ error: "Failed to fetch device points" });
@@ -193,7 +209,12 @@ router.post("/cache/sync", async (req, res) => {
       const dtTo = new Date(to);
       dtTo.setHours(23, 59, 59, 999);
 
-      const url = `${BASE_URL}/device-point?api-key=${apiKey}&device_id=${device_id}&dt_server_from=${dtFrom.toISOString()}&dt_server_to=${dtTo.toISOString()}&limit=5000`;
+      const url = devicePointUrl(apiKey, {
+        device_id,
+        dt_server_from: dtFrom.toISOString(),
+        dt_server_to: dtTo.toISOString(),
+        limit: "5000",
+      });
       const ptResponse = await fetch(url);
       if (!ptResponse.ok) continue;
 
@@ -291,7 +312,12 @@ router.get("/odometer-range", async (req, res) => {
     const dtTo = new Date(to);
     dtTo.setHours(23, 59, 59, 999);
 
-    const url = `${BASE_URL}/device-point?api-key=${apiKey}&device_id=${device_id}&dt_server_from=${dtFrom.toISOString()}&dt_server_to=${dtTo.toISOString()}&limit=5000`;
+    const url = devicePointUrl(apiKey, {
+      device_id,
+      dt_server_from: dtFrom.toISOString(),
+      dt_server_to: dtTo.toISOString(),
+      limit: "5000",
+    });
     const ptResponse = await fetch(url);
     if (!ptResponse.ok) {
       res.status(502).json({ error: "Failed to fetch device points" });

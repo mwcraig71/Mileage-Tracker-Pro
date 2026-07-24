@@ -1,7 +1,11 @@
 import { Router } from "express";
 import { generateManagerToken } from "../managerToken";
+import { makeRateLimiter, safeCompare } from "../lib/security";
 
 const router = Router();
+
+// Password-check endpoints are brute-force targets: 10 attempts per 15 min per IP.
+const passwordRateLimit = makeRateLimiter({ windowMs: 15 * 60 * 1000, max: 10 });
 
 /**
  * GET /api/config/manager-password
@@ -11,7 +15,7 @@ const router = Router();
  * Note: POST /api/config/verify-password is preferred because it also
  * issues a scoped unlock token and avoids query-param credential exposure.
  */
-router.get("/manager-password", (req, res) => {
+router.get("/manager-password", passwordRateLimit, (req, res) => {
   const managerPassword = process.env.MANAGER_PASSWORD;
   if (!managerPassword) {
     res.status(503).json({ error: "Manager password is not configured on this server. Set the MANAGER_PASSWORD environment secret." });
@@ -19,10 +23,10 @@ router.get("/manager-password", (req, res) => {
   }
   const auth = req.headers.authorization ?? "";
   const password = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-  res.json({ valid: password === managerPassword });
+  res.json({ valid: safeCompare(password, managerPassword) });
 });
 
-router.post("/verify-password", (req, res) => {
+router.post("/verify-password", passwordRateLimit, (req, res) => {
   const { password, period_id } = req.body as { password?: string; period_id?: number };
 
   const managerPassword = process.env.MANAGER_PASSWORD;
@@ -31,7 +35,7 @@ router.post("/verify-password", (req, res) => {
     return;
   }
 
-  if (typeof password !== "string" || password !== managerPassword) {
+  if (typeof password !== "string" || !safeCompare(password, managerPassword)) {
     res.json({ valid: false, token: null });
     return;
   }

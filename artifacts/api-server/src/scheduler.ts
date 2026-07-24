@@ -1,9 +1,7 @@
 import cron from "node-cron";
-import { Pool } from "pg";
+import { pool } from "./lib/db";
 import { logger } from "./lib/logger";
 import { sendAlertEmail } from "./lib/email";
-
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 const BASE_URL = "https://track.onestepgps.com/v3/api/public";
 const METERS_PER_MILE = 1609.344;
@@ -64,12 +62,14 @@ async function fetchTodayMovingTrucks(): Promise<
 
   for (const device of devices) {
     try {
-      const url =
-        `${BASE_URL}/device-point?api-key=${apiKey}` +
-        `&device_id=${device.device_id}` +
-        `&dt_server_from=${dtFrom.toISOString()}` +
-        `&dt_server_to=${dtTo.toISOString()}` +
-        `&limit=5000`;
+      const qs = new URLSearchParams({
+        "api-key": apiKey,
+        device_id: device.device_id,
+        dt_server_from: dtFrom.toISOString(),
+        dt_server_to: dtTo.toISOString(),
+        limit: "5000",
+      });
+      const url = `${BASE_URL}/device-point?${qs.toString()}`;
 
       const ptResp = await fetch(url);
       if (!ptResp.ok) continue;
@@ -221,15 +221,23 @@ function scheduleAt(hhmm: string): void {
     currentTask = null;
   }
   const expr = parseCronTime(hhmm);
-  currentTask = cron.schedule(expr, async () => {
-    logger.info({ checkTime: hhmm }, "Running daily accountability check (scheduled)");
-    try {
-      await runAccountabilityCheck();
-    } catch (err) {
-      logger.error({ err }, "Scheduled accountability check failed");
-    }
-  });
-  logger.info({ checkTime: hhmm, cronExpr: expr }, "Accountability check scheduled");
+  // Without a timezone the cron fires in server-local time (UTC on Replit),
+  // so "10:00" would run at 6 AM Eastern. SCHEDULER_TZ pins it (IANA name,
+  // e.g. "America/New_York").
+  const timezone = process.env.SCHEDULER_TZ;
+  currentTask = cron.schedule(
+    expr,
+    async () => {
+      logger.info({ checkTime: hhmm }, "Running daily accountability check (scheduled)");
+      try {
+        await runAccountabilityCheck();
+      } catch (err) {
+        logger.error({ err }, "Scheduled accountability check failed");
+      }
+    },
+    timezone ? { timezone } : undefined,
+  );
+  logger.info({ checkTime: hhmm, cronExpr: expr, timezone: timezone ?? "server-local" }, "Accountability check scheduled");
 }
 
 /** Read check_time from DB, then start the cron. */

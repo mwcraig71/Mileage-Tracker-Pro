@@ -1,9 +1,12 @@
 import { Router } from "express";
-import { Pool } from "pg";
+import { pool } from "../lib/db";
 import { runAccountabilityCheck } from "../scheduler";
+import { makeRateLimiter } from "../lib/security";
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const router = Router();
+
+// The manual check fans out GPS API calls and sends emails — throttle it.
+const checkRateLimit = makeRateLimiter({ windowMs: 10 * 60 * 1000, max: 5 });
 
 // GET /api/alerts — unresolved alerts from the last 7 days
 router.get("/", async (req, res) => {
@@ -22,7 +25,7 @@ router.get("/", async (req, res) => {
 });
 
 // POST /api/alerts/check — manually trigger the accountability check
-router.post("/check", async (_req, res) => {
+router.post("/check", checkRateLimit, async (_req, res) => {
   try {
     const result = await runAccountabilityCheck();
     res.json(result);
